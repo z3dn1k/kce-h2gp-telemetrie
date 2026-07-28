@@ -1,0 +1,4 @@
+h2gp-telemetry/target/
+data.csv
+build/
+dist/

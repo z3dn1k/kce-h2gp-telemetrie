@@ -4,8 +4,6 @@ A high-performance, low-latency telemetry dashboard for H2GP (Hydrogen Grand Pri
 
 Designed with a "Silent Killer" minimalist dark aesthetic, this dashboard processes real-time serial data from the car's Main MCU, providing trackside engineers with instant visibility into both the Fuel Cell and Battery/C-Bank systems.
 
-![Dashboard Preview](docs/dashboard-preview.png) <!-- Note: Add your screenshot here and push to a /docs folder! -->
-
 ## Key Features
 
 *   **Bifurcated UI Layout:** Strict 50/50 split-screen separating the Battery/C-Bank (Cyan) and Fuel Cell (Red) metrics for instant visual orientation during high-pressure 8-hour races.

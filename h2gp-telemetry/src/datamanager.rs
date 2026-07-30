@@ -73,4 +73,72 @@ impl DataManager {
         let sum: f64 = slice.iter().map(|s| s.fc.v).sum();
         sum / (slice.len() as f64)
     }
+    pub fn compute_batt_current_avg(&self, window: usize) -> f64 {
+        if self.history.is_empty() || window == 0 {
+            return 0.0;
+        }
+        let len = self.history.len();
+        let start = if len > window { len - window } else { 0 };
+        let slice = &self.history[start..];
+        
+        let sum: f64 = slice.iter().map(|s| s.batt.i).sum();
+        sum / (slice.len() as f64)
+    }
+
+    pub fn compute_fc_current_avg(&self, window: usize) -> f64 {
+        if self.history.is_empty() || window == 0 {
+            return 0.0;
+        }
+        let len = self.history.len();
+        let start = if len > window { len - window } else { 0 };
+        let slice = &self.history[start..];
+        
+        let sum: f64 = slice.iter().map(|s| s.fc.i).sum();
+        sum / (slice.len() as f64)
+    }
+
+    // --- MIN / MAX TRACKING FOR BATT ---
+    pub fn batt_v_min_max(&self) -> (f64, f64) {
+        if self.history.is_empty() { return (0.0, 0.0); }
+        let min = self.history.iter().fold(f64::INFINITY, |a, s| a.min(s.batt.v));
+        let max = self.history.iter().fold(f64::NEG_INFINITY, |a, s| a.max(s.batt.v));
+        (min, max)
+    }
+
+    pub fn batt_i_min_max(&self) -> (f64, f64) {
+        if self.history.is_empty() { return (0.0, 0.0); }
+        let min = self.history.iter().fold(f64::INFINITY, |a, s| a.min(s.batt.i));
+        let max = self.history.iter().fold(f64::NEG_INFINITY, |a, s| a.max(s.batt.i));
+        (min, max)
+    }
+
+    pub fn batt_p_min_max(&self) -> (f64, f64) {
+        if self.history.is_empty() { return (0.0, 0.0); }
+        let min = self.history.iter().fold(f64::INFINITY, |a, s| a.min(s.batt.p));
+        let max = self.history.iter().fold(f64::NEG_INFINITY, |a, s| a.max(s.batt.p));
+        (min, max)
+    }
+
+    // --- MIN / MAX TRACKING FOR FUEL CELL ---
+    pub fn fc_v_min_max(&self) -> (f64, f64) {
+        if self.history.is_empty() { return (0.0, 0.0); }
+        let min = self.history.iter().fold(f64::INFINITY, |a, s| a.min(s.fc.v));
+        let max = self.history.iter().fold(f64::NEG_INFINITY, |a, s| a.max(s.fc.v));
+        (min, max)
+    }
+
+    pub fn fc_i_min_max(&self) -> (f64, f64) {
+        if self.history.is_empty() { return (0.0, 0.0); }
+        let min = self.history.iter().fold(f64::INFINITY, |a, s| a.min(s.fc.i));
+        let max = self.history.iter().fold(f64::NEG_INFINITY, |a, s| a.max(s.fc.i));
+        (min, max)
+    }
+
+    pub fn fc_p_min_max(&self) -> (f64, f64) {
+        if self.history.is_empty() { return (0.0, 0.0); }
+        let min = self.history.iter().fold(f64::INFINITY, |a, s| a.min(s.fc.p));
+        let max = self.history.iter().fold(f64::NEG_INFINITY, |a, s| a.max(s.fc.p));
+        (min, max)
+    }
+
 }

@@ -78,7 +78,7 @@ pub fn start_serial_thread(
                             let fc_data = decode_ina_channel(&payload[44..72]);
 
                             let sample = TelemetrySample {
-                                timestamp: "Live".to_string(),
+                                timestamp_ms: 0,
                                 batt: batt_data,
                                 fc: fc_data,
                                 rev3_aux: Default::default(),
@@ -90,7 +90,7 @@ pub fn start_serial_thread(
                         } else if kind == TELEMETRY_KIND_AUX {
                             let aux_data = decode_rev3_aux(&payload);
                             let sample = TelemetrySample {
-                                timestamp: "Live".to_string(),
+                                timestamp_ms: 0,
                                 batt: Default::default(),
                                 fc: Default::default(),
                                 rev3_aux: aux_data,

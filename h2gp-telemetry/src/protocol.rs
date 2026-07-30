@@ -8,13 +8,12 @@ pub const TELEMETRY_AUX_PACKET_SIZE: usize = 22;
 #[derive(Default, Debug, Clone, Copy)]
 pub struct ChannelData {
     pub v: f64,
+    pub sv_mv: f64,
     pub i: f64,
     pub p: f64,
     pub e: f64,
-    pub c: f64,
-    pub t: f64,
-    pub ah: f64,
-    pub shunt_mv: f64,
+    pub ah: f64, 
+    pub t: f64,  // INA228 internal temperature
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -31,7 +30,7 @@ pub struct Rev3AuxData {
 
 #[derive(Default, Debug, Clone)]
 pub struct TelemetrySample {
-    pub timestamp: String,
+    pub timestamp_ms: u32, // Fixed to match demo.rs
     pub batt: ChannelData,
     pub fc: ChannelData,
     pub rev3_aux: Rev3AuxData,
@@ -99,15 +98,15 @@ pub fn decode_ina_channel(input: &[u8]) -> ChannelData {
     let ah = c / 3600.0;
     let shunt_mv = (shunt_raw as f64) * INA_SHUNT_MV_LSB * 1000.0;
 
+    // FIX: Assemble the struct exactly as it is defined at the top
     ChannelData {
         v,
+        sv_mv: shunt_mv, // Map the calculated shunt_mv to the new sv_mv field
         i,
         p,
         e,
-        c,
+        ah,              // Ignore raw 'c' and only pass 'ah'
         t,
-        ah,
-        shunt_mv,
     }
 }
 

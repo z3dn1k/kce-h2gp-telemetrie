@@ -101,17 +101,11 @@ fn render_mini_stat(ui: &mut egui::Ui, title: &str, val_str: String) {
 
 impl eframe::App for TelemetryApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Force the "Silent Killer" minimalist dark theme
-        let mut visuals = egui::Visuals::dark();
-        visuals.window_fill = egui::Color32::from_rgb(10, 10, 10);
-        visuals.panel_fill = egui::Color32::from_rgb(10, 10, 10);
-        visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(18, 18, 18);
-        ctx.set_visuals(visuals);
-
+        
+        // Drain the channel as fast as possible on every frame cycle
         while let Ok(sample) = self.rx.try_recv() {
             self.packet_count += 1;
             if sample.has_channel_data {
-                logger::append_to_csv(&sample, "data.csv");
                 self.data_manager.add_data(sample.clone());
                 self.latest_sample = Some(sample);
                 self.is_connected = true;
@@ -119,7 +113,6 @@ impl eframe::App for TelemetryApp {
                 self.latest_aux = Some(sample.rev3_aux);
             }
         }
-        ctx.request_repaint();
 
         // 1. Top Toolbar (Minimalist)
         egui::TopBottomPanel::top("toolbar").frame(egui::Frame::none().fill(egui::Color32::from_rgb(15, 15, 15)).inner_margin(8.0)).show(ctx, |ui| {
@@ -264,8 +257,8 @@ impl eframe::App for TelemetryApp {
                     let col_width = (total_width - 30.0) / 2.0;
 
                     ui.horizontal_top(|ui| {
-                        let batt_color = egui::Color32::from_rgb(60, 180, 220); // Striking Cyan
-                        let fc_color = egui::Color32::from_rgb(220, 60, 60); // Striking Red
+                        let batt_color = egui::Color32::from_rgb(60, 180, 220);
+                        let fc_color = egui::Color32::from_rgb(220, 60, 60);
 
                         // LEFT COLUMN: BATT / CBANK
                         let batt_resp = ui.allocate_ui_with_layout(egui::vec2(col_width, 0.0), egui::Layout::top_down(egui::Align::LEFT), |ui| {
@@ -298,17 +291,14 @@ impl eframe::App for TelemetryApp {
                             });
                         }).response;
 
-                        // CUSTOM DUAL-COLORED SEPARATOR (Replaces the greedy vertical separator)
-                        // Allocate exactly an 8 pixel gap, and paint two 2-pixel wide lines inside it matching the column height.
+                        // CUSTOM DUAL-COLORED SEPARATOR
                         let (line_rect, _) = ui.allocate_exact_size(egui::vec2(8.0, batt_resp.rect.height()), egui::Sense::hover());
                         
-                        // Draw Cyan Line
                         ui.painter().rect_filled(
                             egui::Rect::from_min_size(egui::pos2(line_rect.min.x + 1.0, line_rect.min.y), egui::vec2(2.0, line_rect.height())),
                             0.0,
                             batt_color,
                         );
-                        // Draw Red Line
                         ui.painter().rect_filled(
                             egui::Rect::from_min_size(egui::pos2(line_rect.min.x + 5.0, line_rect.min.y), egui::vec2(2.0, line_rect.height())),
                             0.0,
@@ -403,17 +393,20 @@ impl eframe::App for TelemetryApp {
                 let latest_time = times.last().copied().unwrap_or(0.0);
                 let time_threshold = latest_time - self.chart_window;
 
-                for (&t, s) in times.iter().zip(history.iter()) {
-                    if t >= time_threshold {
-                        let (b_val, f_val) = match self.chart_tab {
-                            ChartTab::Voltage => (s.batt.v, s.fc.v),
-                            ChartTab::Current => (s.batt.i, s.fc.i),
-                            ChartTab::Power   => (s.batt.p, s.fc.p),
-                            ChartTab::Energy  => (s.batt.e, s.fc.e),
-                        };
-                        batt_points.push([t, b_val]);
-                        fc_points.push([t, f_val]);
-                    }
+                let start_idx = times.partition_point(|&t| t < time_threshold);
+
+                for i in start_idx..times.len() {
+                    let t = times[i];
+                    let s = &history[i];
+                    
+                    let (b_val, f_val) = match self.chart_tab {
+                        ChartTab::Voltage => (s.batt.v, s.fc.v),
+                        ChartTab::Current => (s.batt.i, s.fc.i),
+                        ChartTab::Power   => (s.batt.p, s.fc.p),
+                        ChartTab::Energy  => (s.batt.e, s.fc.e),
+                    };
+                    batt_points.push([t, b_val]);
+                    fc_points.push([t, f_val]);
                 }
 
                 let y_axis_label = match self.chart_tab {
@@ -426,20 +419,20 @@ impl eframe::App for TelemetryApp {
                 egui_plot::Plot::new("history_plot")
                     .height(ui.available_height())
                     .show_background(false)
-                    .show_axes([false, true]) // Keeps X-axis hidden for the clean oscilloscope look
+                    .show_axes([false, true]) 
                     .legend(egui_plot::Legend::default())
                     .show(ui, |plot_ui| {
                         plot_ui.line(
                             egui_plot::Line::new(egui_plot::PlotPoints::new(batt_points))
                                 .name(format!("BATT {}", y_axis_label))
                                 .width(2.0)
-                                .color(egui::Color32::from_rgb(60, 180, 220)) // Striking Cyan
+                                .color(egui::Color32::from_rgb(60, 180, 220)) 
                         );
                         plot_ui.line(
                             egui_plot::Line::new(egui_plot::PlotPoints::new(fc_points))
                                 .name(format!("FC {}", y_axis_label))
                                 .width(2.0)
-                                .color(egui::Color32::from_rgb(220, 60, 60)) // Matched Red
+                                .color(egui::Color32::from_rgb(220, 60, 60)) 
                         );
                     });
             } else {
@@ -448,6 +441,10 @@ impl eframe::App for TelemetryApp {
                 });
             }
         });
+
+        // FIX 4: Request a steady 30 FPS repaint (33ms). 
+        // This keeps the UI highly responsive without maxing out a CPU core.
+        ctx.request_repaint_after(std::time::Duration::from_millis(33));
     }
 }
 
@@ -460,6 +457,14 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "H2Gp Telemetry Dashboard",
         options,
-        Box::new(|_cc| Ok(Box::<TelemetryApp>::default())),
+        Box::new(|cc| {
+            let mut visuals = egui::Visuals::dark();
+            visuals.window_fill = egui::Color32::from_rgb(10, 10, 10);
+            visuals.panel_fill = egui::Color32::from_rgb(10, 10, 10);
+            visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(18, 18, 18);
+            cc.egui_ctx.set_visuals(visuals);
+
+            Ok(Box::<TelemetryApp>::default())
+        }),
     )
 }

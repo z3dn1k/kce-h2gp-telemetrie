@@ -30,7 +30,7 @@ pub struct Rev3AuxData {
 
 #[derive(Default, Debug, Clone)]
 pub struct TelemetrySample {
-    pub timestamp_ms: u32, // Fixed to match demo.rs
+    pub timestamp_ms: u32,
     pub batt: ChannelData,
     pub fc: ChannelData,
     pub rev3_aux: Rev3AuxData,
@@ -46,46 +46,37 @@ const INA_TEMP_LSB_C: f64 = 1.0 / 128.0;
 const INA_POWER_LSB_W: f64 = 3.2 * INA_CURRENT_LSB_A;
 const INA_ENERGY_LSB_J: f64 = 16.0 * INA_POWER_LSB_W;
 
-fn get_u32_le(input: &[u8]) -> u32 {
-    u32::from_le_bytes([input[0], input[1], input[2], input[3]])
-}
-
+#[inline(always)]
 fn get_u40_le(input: &[u8]) -> u64 {
-    ((input[4] as u64) << 32)
-        | ((input[3] as u64) << 24)
-        | ((input[2] as u64) << 16)
-        | ((input[1] as u64) << 8)
-        | (input[0] as u64)
+    // idiomatic conversion: pad to 8 bytes and read natively
+    let mut buf = [0u8; 8];
+    buf[..5].copy_from_slice(&input[0..5]);
+    u64::from_le_bytes(buf)
 }
 
+#[inline(always)]
 fn sign_extend_20(value: u32) -> i32 {
-    let mask = (1u32 << 20) - 1;
-    let sign = 1u32 << 19;
-    let masked = value & mask;
-    if (masked & sign) != 0 {
-        (masked | !mask) as i32
-    } else {
-        masked as i32
-    }
+    // Branchless sign extension. Shift the 20 bits to the top of 
+    // the 32-bit register, then arithmetic shift right.
+    ((value << 12) as i32) >> 12
 }
 
+#[inline(always)]
 fn sign_extend_40(value: u64) -> i64 {
-    let sign_bit = 1u64 << 39;
-    let value_mask = (1u64 << 40) - 1;
-    let masked = value & value_mask;
-    if (masked & sign_bit) != 0 {
-        (masked | !value_mask) as i64
-    } else {
-        masked as i64
-    }
+    // Branchless sign extension for 40-bit values.
+    ((value << 24) as i64) >> 24
 }
 
 pub fn decode_ina_channel(input: &[u8]) -> ChannelData {
-    let shunt_raw = sign_extend_20(get_u32_le(&input[0..4]) >> 4);
-    let bus_voltage_raw = get_u32_le(&input[4..8]);
-    let die_temp_raw = i16::from_le_bytes([input[8], input[9]]);
-    let current_raw = sign_extend_20(get_u32_le(&input[10..14]) >> 4);
-    let power_raw = get_u32_le(&input[14..18]);
+    // By explicitly asserting the minimum length here once, the compiler 
+    // will elide ALL bounds checks for the rest of this function.
+    assert!(input.len() >= 28, "INA channel data requires at least 28 bytes");
+
+    let shunt_raw = sign_extend_20(u32::from_le_bytes(input[0..4].try_into().unwrap()) >> 4);
+    let bus_voltage_raw = u32::from_le_bytes(input[4..8].try_into().unwrap());
+    let die_temp_raw = i16::from_le_bytes(input[8..10].try_into().unwrap());
+    let current_raw = sign_extend_20(u32::from_le_bytes(input[10..14].try_into().unwrap()) >> 4);
+    let power_raw = u32::from_le_bytes(input[14..18].try_into().unwrap());
     let energy_raw = get_u40_le(&input[18..23]);
     let charge_raw = sign_extend_40(get_u40_le(&input[23..28]));
 
@@ -98,14 +89,13 @@ pub fn decode_ina_channel(input: &[u8]) -> ChannelData {
     let ah = c / 3600.0;
     let shunt_mv = (shunt_raw as f64) * INA_SHUNT_MV_LSB * 1000.0;
 
-    // FIX: Assemble the struct exactly as it is defined at the top
     ChannelData {
         v,
-        sv_mv: shunt_mv, // Map the calculated shunt_mv to the new sv_mv field
+        sv_mv: shunt_mv,
         i,
         p,
         e,
-        ah,              // Ignore raw 'c' and only pass 'ah'
+        ah,
         t,
     }
 }
@@ -116,22 +106,26 @@ pub fn decode_rev3_aux(input: &[u8]) -> Rev3AuxData {
     }
 
     let sensor_count = input[0];
-    let mut temps = [0.0; 4];
-    for i in 0..4 {
-        let raw = i16::from_le_bytes([input[1 + i * 2], input[2 + i * 2]]);
-        temps[i] = if raw == i16::MIN { -127.0 } else { (raw as f64) / 16.0 };
-    }
+    
+    // std::array::from_fn constructs the array in place without 
+    // double-initializing memory like `[0.0; 4]` does.
+    let temperature_c = std::array::from_fn(|i| {
+        let offset = 1 + i * 2;
+        let raw = i16::from_le_bytes(input[offset..offset+2].try_into().unwrap());
+        if raw == i16::MIN { -127.0 } else { (raw as f64) / 16.0 }
+    });
 
-    let max_temp_raw = i16::from_le_bytes([input[9], input[10]]);
+    let max_temp_raw = i16::from_le_bytes(input[9..11].try_into().unwrap());
     let max_temperature_c = if max_temp_raw == i16::MIN { -127.0 } else { (max_temp_raw as f64) / 16.0 };
+    
     let fan_duty_percent = input[11];
-    let flags = u16::from_le_bytes([input[12], input[13]]);
+    let flags = u16::from_le_bytes(input[12..14].try_into().unwrap());
     let fan_mode = if input.len() > 14 { input[14] } else { 0 };
 
     Rev3AuxData {
         valid: true,
         sensor_count,
-        temperature_c: temps,
+        temperature_c,
         max_temperature_c,
         fan_duty_percent,
         fan_control_temperature_c: 0.0,

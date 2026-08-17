@@ -2,8 +2,9 @@ use std::io::{Read, Write};
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 use crate::protocol::{TelemetrySample, decode_ina_channel, decode_rev3_aux, TELEMETRY_PACKET_SIZE, TELEMETRY_KIND_AUX};
+use crate::logger;
 
-const USB_FRAME_MAGIC: u32 = 0x50473248; // "H2GP" little-endian
+const USB_FRAME_MAGIC: [u8; 4] = [0x48, 0x32, 0x47, 0x50]; // "H2GP" little-endian
 const USB_HEADER_SIZE: usize = 10;
 const USB_KIND_MAIN_TELEMETRY: u8 = 1;
 
@@ -36,8 +37,11 @@ pub fn start_serial_thread(
             }
         };
 
-        let mut buffer: Vec<u8> = Vec::new();
-        let mut chunk = [0u8; 256];
+        let mut buffer: Vec<u8> = Vec::with_capacity(4096);
+        let mut chunk = [0u8; 1024]; 
+
+        // FIX 2: Start tracking time specifically on the serial thread
+        let serial_start_time = std::time::Instant::now(); 
 
         loop {
             // Check for outgoing commands from the UI
@@ -56,10 +60,19 @@ pub fn start_serial_thread(
                     buffer.extend_from_slice(&chunk[..n]);
 
                     while buffer.len() >= USB_HEADER_SIZE {
-                        let magic = u32::from_le_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
-                        if magic != USB_FRAME_MAGIC {
-                            buffer.remove(0);
-                            continue;
+                        if let Some(pos) = buffer.windows(4).position(|w| w == USB_FRAME_MAGIC) {
+                            if pos > 0 {
+                                buffer.drain(0..pos);
+                            }
+                        } else {
+                            let keep = buffer.len().min(3);
+                            let discard_to = buffer.len() - keep;
+                            buffer.drain(0..discard_to);
+                            break; 
+                        }
+
+                        if buffer.len() < USB_HEADER_SIZE {
+                            break; 
                         }
 
                         let kind = buffer[4];
@@ -67,18 +80,18 @@ pub fn start_serial_thread(
                         let frame_length = USB_HEADER_SIZE + payload_len;
 
                         if buffer.len() < frame_length {
-                            break;
+                            break; 
                         }
 
-                        let payload = buffer[USB_HEADER_SIZE..frame_length].to_vec();
-                        buffer.drain(0..frame_length);
+                        let payload = &buffer[USB_HEADER_SIZE..frame_length];
 
                         if kind == USB_KIND_MAIN_TELEMETRY && payload.len() == TELEMETRY_PACKET_SIZE {
                             let batt_data = decode_ina_channel(&payload[16..44]);
                             let fc_data = decode_ina_channel(&payload[44..72]);
 
                             let sample = TelemetrySample {
-                                timestamp_ms: 0,
+                                // FIX 2: Stamp the time exactly when it's parsed from the buffer
+                                timestamp_ms: serial_start_time.elapsed().as_millis() as u32,
                                 batt: batt_data,
                                 fc: fc_data,
                                 rev3_aux: Default::default(),
@@ -86,11 +99,14 @@ pub fn start_serial_thread(
                                 has_rev3_aux: false,
                             };
 
+                            logger::append_to_csv(&sample, "data.csv");
                             let _ = tx.send(sample);
+                            
                         } else if kind == TELEMETRY_KIND_AUX {
-                            let aux_data = decode_rev3_aux(&payload);
+                            let aux_data = decode_rev3_aux(payload);
                             let sample = TelemetrySample {
-                                timestamp_ms: 0,
+                                // FIX 2: Stamp the time exactly when it's parsed from the buffer
+                                timestamp_ms: serial_start_time.elapsed().as_millis() as u32,
                                 batt: Default::default(),
                                 fc: Default::default(),
                                 rev3_aux: aux_data,
@@ -100,6 +116,8 @@ pub fn start_serial_thread(
 
                             let _ = tx.send(sample);
                         }
+
+                        buffer.drain(0..frame_length);
                     }
                 }
                 Ok(_) => {}

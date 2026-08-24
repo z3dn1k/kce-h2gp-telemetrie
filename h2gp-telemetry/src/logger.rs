@@ -42,3 +42,39 @@ pub fn append_to_csv(sample: &TelemetrySample, filename: &str) {
         sample.fc.v, sample.fc.sv_mv, sample.fc.i, sample.fc.p, sample.fc.e, sample.fc.ah, sample.fc.t
     ).unwrap();
 }
+
+pub fn log_anomaly(timestamp_ms: u32, value_str: &str, cause_str: &str) {
+    let filename = "anomalies.log";
+    
+    let writer_arc = {
+        let mut loggers = LOGGERS.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap();
+        loggers.entry(filename.to_string()).or_insert_with(|| {
+            let file_exists = std::path::Path::new(filename).exists();
+            let is_empty = !file_exists || std::fs::metadata(filename).map(|m| m.len()).unwrap_or(0) == 0;
+
+            let file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(filename)
+                .expect("Failed to open anomaly log");
+            
+            let mut writer = BufWriter::with_capacity(4096, file);
+            
+            if is_empty {
+                // Generate the exact column headers you requested
+                writeln!(writer, "{:<20} {:<30} {}", "time stamp", "value of anomaly", "possible cause").unwrap();
+                writeln!(writer, "-------------------------------------------------------------------------------").unwrap();
+            }
+            Arc::new(Mutex::new(writer))
+        }).clone()
+    };
+
+    // Convert milliseconds to MM:SS format
+    let total_secs = timestamp_ms / 1000;
+    let mins = total_secs / 60;
+    let secs = total_secs % 60;
+    let time_str = format!("{:02}:{:02}", mins, secs);
+
+    let mut writer = writer_arc.lock().unwrap();
+    writeln!(writer, "{:<20} {:<30} {}", time_str, value_str, cause_str).unwrap();
+}

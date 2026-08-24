@@ -103,13 +103,34 @@ impl eframe::App for TelemetryApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         
         // Drain the channel as fast as possible on every frame cycle
+        // Drain the channel as fast as possible on every frame cycle
         while let Ok(sample) = self.rx.try_recv() {
             self.packet_count += 1;
+            
             if sample.has_channel_data {
+                // 1. Data Archival
+                logger::append_to_csv(&sample, "data.csv");
                 self.data_manager.add_data(sample.clone());
+                
+                // 2. Anomaly Detection Engine
+                if sample.batt.i > 15.0 {
+                    logger::log_anomaly(sample.timestamp_ms, &format!("{:.2} A", sample.batt.i), "Servo stall or drivetrain bind");
+                }
+                if sample.fc.v < 9.0 && sample.fc.v > 2.0 { // > 2.0 prevents logging when FC is simply turned off
+                    logger::log_anomaly(sample.timestamp_ms, &format!("{:.2} V", sample.fc.v), "Fuel starvation or purge valve stuck open");
+                }
+                if sample.batt.t > 45.0 {
+                    logger::log_anomaly(sample.timestamp_ms, &format!("{:.1} C", sample.batt.t), "High continuous load or insufficient cooling");
+                }
+
                 self.latest_sample = Some(sample);
                 self.is_connected = true;
+                
             } else if sample.has_rev3_aux {
+                // Check for AUX anomalies (e.g., Short Circuit Flag)
+                if (sample.rev3_aux.flags & 0x01) != 0 {
+                    logger::log_anomaly(sample.timestamp_ms, "ZKRACOVANI", "Commanded FC short circuit");
+                }
                 self.latest_aux = Some(sample.rev3_aux);
             }
         }

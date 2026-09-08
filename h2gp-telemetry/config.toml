@@ -1,0 +1,47 @@
+# ==============================================================================
+#  H2GP TELEMETRY — CONFIGURATION FILE (config.toml)
+#  Allows tuning dashboard thresholds, timing, and communication without recompilation.
+# ==============================================================================
+
+# Serial connection baud rate (car MCU standard: 115200)
+serial_baud_rate = 115200
+
+# Default serial port path or name ("COM3" on Windows, "/dev/ttyUSB0" on Linux)
+default_port = "COM3"
+
+# Maximum number of samples stored in the in-memory circular buffer
+buffer_capacity = 1200
+
+# Moving average window size (SMA) for noise attenuation
+sma_window = 10
+
+# Battery overcurrent warning threshold in Amperes (servo stall detection)
+anomaly_batt_overcurrent_a = 15.0
+
+# Fuel cell voltage sag threshold in Volts (hydrogen starvation warning)
+anomaly_fc_vsag_v = 9.0
+
+# Minimum fuel cell voltage in Volts to distinguish sag from disconnect/idle
+anomaly_fc_min_v = 2.0
+
+# Battery overtemperature warning threshold in degrees Celsius
+anomaly_batt_overtemp_c = 45.0
+
+# Maximum number of alerts retained in the UI live anomaly alert side panel
+anomaly_queue_capacity = 10
+
+# UI refresh interval in milliseconds (33 ms ≈ 30 FPS)
+ui_refresh_interval_ms = 33
+
+# Default horizontal chart time window in seconds
+default_chart_window_s = 30.0
+
+# Initial driver code displayed on onboard matrix
+default_driver_code = "SKL"
+
+# Initial cooling fan PWM duty cycle percentage (0-100)
+default_fan_duty = 70
+
+# Replay playback interval in milliseconds for Demo Mode (100 ms = 10 Hz)
+demo_interval_ms = 100
+

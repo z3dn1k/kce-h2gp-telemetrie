@@ -5,7 +5,9 @@
 //! binary packet unpacking, and bidirectional command uplink to the car's MCU.
 
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Arc;
 use std::time::Duration;
 use crate::protocol::{TelemetrySample, decode_ina_channel, decode_rev3_aux, TELEMETRY_PACKET_SIZE, TELEMETRY_KIND_AUX};
 use crate::error::TelemetryError;
@@ -15,22 +17,36 @@ const USB_FRAME_MAGIC: [u8; 4] = [0x48, 0x32, 0x47, 0x50]; // "H2GP" in ASCII
 const USB_HEADER_SIZE: usize = 10;
 const USB_KIND_MAIN_TELEMETRY: u8 = 1;
 
+/// Scans the operating system for currently connected serial communication ports.
+///
+/// Returns a list of system port names (e.g. `["/dev/ttyUSB0", "/dev/ttyACM0"]` on Linux,
+/// or `["COM3", "COM4"]` on Windows). If no ports are found or scanning fails, returns an empty vector.
+pub fn detect_available_ports() -> Vec<String> {
+    serialport::available_ports()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.port_name)
+        .collect()
+}
+
 /// Spawns a background thread to manage USB serial I/O.
 ///
-/// Continuously reads from the specified serial port, re-aligns stream frames
-/// on sync sequence boundaries, decodes telemetry samples, and dispatches them
-/// to the UI thread via `tx`. Concurrently polls `cmd_rx` to transmit uplink
-/// JSON commands back to the microcontroller.
+/// Continuously reads from the specified serial port while `is_running` is true,
+/// re-aligns stream frames on sync sequence boundaries, decodes telemetry samples,
+/// and dispatches them to the UI thread via `tx`. Concurrently polls `cmd_rx` to
+/// transmit uplink JSON commands back to the microcontroller.
 pub fn start_serial_thread(
     port_name: String, 
     baud_rate: u32, 
     tx: Sender<TelemetrySample>,
-    cmd_rx: Receiver<String>
+    cmd_rx: Receiver<String>,
+    is_running: Arc<AtomicBool>,
 ) {
     std::thread::spawn(move || {
-        if let Err(e) = run_serial_loop(&port_name, baud_rate, &tx, &cmd_rx) {
+        if let Err(e) = run_serial_loop(&port_name, baud_rate, &tx, &cmd_rx, &is_running) {
             eprintln!("[serial] {}", e);
         }
+        println!("[serial] Thread terminated cleanly.");
     });
 }
 
@@ -43,6 +59,7 @@ fn run_serial_loop(
     baud_rate: u32,
     tx: &Sender<TelemetrySample>,
     cmd_rx: &Receiver<String>,
+    is_running: &AtomicBool,
 ) -> Result<(), TelemetryError> {
     println!("Serial thread started on port: {} at {} baud", port_name, baud_rate);
 
@@ -64,7 +81,7 @@ fn run_serial_loop(
     let mut chunk = [0u8; 1024]; 
     let serial_start_time = std::time::Instant::now(); 
 
-    loop {
+    while is_running.load(Ordering::Relaxed) {
         // Check for outgoing commands from the UI
         while let Ok(command_str) = cmd_rx.try_recv() {
             let formatted = format!("{}\n", command_str);
@@ -146,5 +163,19 @@ fn run_serial_loop(
                 std::thread::sleep(Duration::from_millis(100));
             }
         }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_available_ports_does_not_panic() {
+        let ports = detect_available_ports();
+        // Just verify it returns a valid vector without crashing
+        let _ = ports.len();
     }
 }

@@ -4,5 +4,11 @@ todo.txt
 docs.txt
 dulezity.txt
 future.txt
+simple-docs.md
 build/
 dist/
+*.log
+summary.txt
+**/summary.txt
+screenshot_*.png
+**/screenshot_*.png

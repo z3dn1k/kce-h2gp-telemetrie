@@ -8,9 +8,8 @@
 //! - **Bottom Panels**: Running averages, power-mix indicator, cooling fan controls, and raw packet diagnostics.
 
 use eframe::egui;
-use std::sync::mpsc;
 use crate::TelemetryApp;
-use crate::{serial, demo};
+use crate::serial;
 
 /// Selectable measurement channels displayed on the real-time history plot.
 #[derive(PartialEq, Clone, Copy)]
@@ -97,22 +96,58 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
     egui::TopBottomPanel::top("toolbar").frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(15, 15, 15)).inner_margin(8.0)).show(ctx, |ui| {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("H2Gp KCE").color(egui::Color32::WHITE).size(14.0).strong());
-            ui.add_space(20.0);
+            ui.add_space(15.0);
             
             ui.label(egui::RichText::new("PORT:").color(egui::Color32::from_gray(100)).size(10.0));
-            ui.add(egui::TextEdit::singleline(&mut app.port_name).desired_width(60.0));
-
-            if ui.button("CONNECT").clicked() {
-                let (cmd_tx, cmd_rx) = mpsc::channel();
-                app.cmd_tx = Some(cmd_tx);
-                serial::start_serial_thread(app.port_name.clone(), 115200, app.telemetry_tx.clone(), cmd_rx);
+            if !app.available_ports.is_empty() {
+                egui::ComboBox::from_id_salt("port_combo")
+                    .selected_text(&app.port_name)
+                    .show_ui(ui, |ui| {
+                        for port in &app.available_ports {
+                            ui.selectable_value(&mut app.port_name, port.clone(), port);
+                        }
+                    });
+            } else {
+                ui.add(egui::TextEdit::singleline(&mut app.port_name).desired_width(70.0));
             }
 
-            if ui.button("DEMO MODE").clicked() {
-                demo::start_demo_thread("data.csv", app.telemetry_tx.clone());
+            if ui.small_button("↻").on_hover_text("Znovu vyhledat dostupné sériové porty (Rescan)").clicked() {
+                app.available_ports = serial::detect_available_ports();
+                if !app.available_ports.is_empty() && !app.available_ports.contains(&app.port_name) {
+                    app.port_name = app.available_ports[0].clone();
+                }
             }
 
-            if ui.button("GENERATE REPORT").clicked() {
+            ui.add_space(5.0);
+
+            if !app.connection_state.is_connected() {
+                if ui.button("CONNECT (C)").on_hover_text("Připojit k sériovému portu [Klávesa C]").clicked() {
+                    app.start_live();
+                }
+
+                if ui.button("DEMO (D)").on_hover_text("Spustit demo simulaci z data.csv [Klávesa D]").clicked() {
+                    app.start_demo();
+                }
+            } else if ui.button("DISCONNECT (C)").on_hover_text("Odpojit aktivní spojení [Klávesa C]").clicked() {
+                app.disconnect();
+            }
+
+            if app.is_paused {
+                if ui.button(egui::RichText::new("▶ RESUME (Space)").color(egui::Color32::from_rgb(255, 215, 0)))
+                    .on_hover_text("Obnovit aktualizaci grafu [Mezerník]")
+                    .clicked() 
+                {
+                    app.toggle_pause();
+                }
+            } else if ui.button("⏸ PAUSE (Space)").on_hover_text("Pozastavit aktualizaci grafu [Mezerník]").clicked() {
+                app.toggle_pause();
+            }
+
+            if ui.button("📷 SCREENSHOT").on_hover_text("Uložit snímek obrazovky do PNG").clicked() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+            }
+
+            if ui.button("📄 REPORT").on_hover_text("Vygenerovat textový report do summary.txt").clicked() {
                 if let Err(e) = app.data_manager.export_summary() {
                     eprintln!("Failed to generate report: {}", e);
                 } else {
@@ -120,16 +155,29 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                 }
             }
 
-            ui.add_space(20.0);
-            let (status_text, status_color) = if app.is_connected { 
-                ("● LIVE", egui::Color32::from_rgb(0, 200, 100)) 
-            } else { 
-                ("● DISCONNECTED", egui::Color32::from_rgb(200, 50, 50)) 
-            };
-            ui.label(egui::RichText::new(status_text).color(status_color).size(12.0));
+            ui.add_space(15.0);
+            let (status_text, status_color) = app.connection_state.status_text();
+            ui.label(egui::RichText::new(status_text).color(status_color).size(12.0).strong());
+
+            if app.connection_state.is_connected() {
+                ui.add_space(10.0);
+                let (pps_col, pps_txt) = if app.pps >= 10.0 {
+                    (egui::Color32::from_rgb(0, 220, 100), format!("{:.0} PPS", app.pps))
+                } else if app.pps > 0.0 {
+                    (egui::Color32::from_rgb(255, 180, 50), format!("{:.0} PPS", app.pps))
+                } else {
+                    (egui::Color32::from_rgb(220, 60, 60), "0 PPS".to_string())
+                };
+                ui.label(egui::RichText::new(pps_txt).color(pps_col).size(11.0).monospace().strong());
+            }
+
+            if let Some((msg, _)) = &app.screenshot_toast {
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new(msg).color(egui::Color32::from_rgb(0, 255, 180)).strong().size(11.0));
+            }
             
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new("UNIT: MAIN MCU").color(egui::Color32::from_gray(80)).size(10.0));
+                ui.label(egui::RichText::new("[1-4 Grafy | Space Pauza | C Spojení | D Demo]").color(egui::Color32::from_gray(80)).size(10.0));
             });
         });
     });
@@ -202,10 +250,10 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
     egui::TopBottomPanel::bottom("stats_row").frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(18, 18, 18)).inner_margin(12.0)).show(ctx, |ui| {
         if let Some(sample) = &app.latest_sample {
             ui.horizontal(|ui| {
-                let batt_v_avg = app.data_manager.compute_batt_voltage_avg(10);
-                let batt_i_avg = app.data_manager.compute_batt_current_avg(10);
-                let fc_v_avg = app.data_manager.compute_fc_voltage_avg(10);
-                let fc_i_avg = app.data_manager.compute_fc_current_avg(10);
+                let batt_v_avg = app.data_manager.compute_batt_voltage_avg(app.config.sma_window);
+                let batt_i_avg = app.data_manager.compute_batt_current_avg(app.config.sma_window);
+                let fc_v_avg = app.data_manager.compute_fc_voltage_avg(app.config.sma_window);
+                let fc_i_avg = app.data_manager.compute_fc_current_avg(app.config.sma_window);
 
                 render_mini_stat(ui, "FC AVG V", format!("{:.2} V", fc_v_avg));
                 ui.add_space(30.0);
@@ -375,13 +423,23 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             // Chart Navigation & Rolling Window Selector
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("GRAPHS").color(egui::Color32::from_gray(120)).size(14.0).strong());
-                ui.add_space(20.0);
-                ui.selectable_value(&mut app.chart_tab, ChartTab::Voltage, "NAPETI (V)");
-                ui.selectable_value(&mut app.chart_tab, ChartTab::Current, "PROUD (A)");
-                ui.selectable_value(&mut app.chart_tab, ChartTab::Power, "VYKON (W)");
-                ui.selectable_value(&mut app.chart_tab, ChartTab::Energy, "ENERGIE (J)");
+                ui.add_space(15.0);
+                ui.selectable_value(&mut app.chart_tab, ChartTab::Voltage, "[1] NAPĚTÍ (V)");
+                ui.selectable_value(&mut app.chart_tab, ChartTab::Current, "[2] PROUD (A)");
+                ui.selectable_value(&mut app.chart_tab, ChartTab::Power, "[3] VÝKON (W)");
+                ui.selectable_value(&mut app.chart_tab, ChartTab::Energy, "[4] ENERGIE (J)");
 
-                ui.add_space(40.0);
+                if app.is_paused {
+                    ui.add_space(10.0);
+                    ui.label(
+                        egui::RichText::new("⏸ POZASTAVENO [Mezerník]")
+                            .color(egui::Color32::from_rgb(255, 200, 50))
+                            .size(11.0)
+                            .strong(),
+                    );
+                }
+
+                ui.add_space(25.0);
                 ui.label(egui::RichText::new("WINDOW:").color(egui::Color32::from_gray(120)).size(10.0).strong());
                 ui.selectable_value(&mut app.chart_window, 5.0, "5s");   
                 ui.selectable_value(&mut app.chart_window, 10.0, "10s"); 

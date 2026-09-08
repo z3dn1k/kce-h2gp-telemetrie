@@ -230,3 +230,4 @@ cargo doc --no-deps --open
 Developed by **Jan Zedník** (`z3dn1k`) for secondary school graduation thesis (*maturitní práce*) & **H2GP Racing Team**.
 
 Released under the **[MIT License](LICENSE)**.
+

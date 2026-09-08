@@ -6,7 +6,9 @@
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use crate::protocol::{ChannelData, TelemetrySample};
@@ -15,13 +17,15 @@ use crate::error::TelemetryError;
 /// Spawns a dedicated worker thread that replays telemetry rows from a CSV file.
 ///
 /// Reads all lines into memory and continuously transmits reconstituted `TelemetrySample`
-/// structs into `tx` at 100 ms intervals (10 Hz). Loops indefinitely until the receiver is closed.
-pub fn start_demo_thread(filename: &str, tx: Sender<TelemetrySample>) {
+/// structs into `tx` at 100 ms intervals (10 Hz). Stops when `is_running` is set to false
+/// or the channel receiver is closed.
+pub fn start_demo_thread(filename: &str, tx: Sender<TelemetrySample>, is_running: Arc<AtomicBool>) {
     let filename = filename.to_string();
     thread::spawn(move || {
-        if let Err(e) = run_demo_loop(&filename, &tx) {
+        if let Err(e) = run_demo_loop(&filename, &tx, &is_running) {
             eprintln!("[demo] {}", e);
         }
+        println!("[demo] Thread terminated cleanly.");
     });
 }
 
@@ -29,10 +33,11 @@ pub fn start_demo_thread(filename: &str, tx: Sender<TelemetrySample>) {
 ///
 /// Opens a recorded CSV file, ignores its original timestamps, and replays
 /// the data at a smooth 10 Hz with a synthetic monotonic clock.
-/// Loops forever until the UI channel disconnects.
+/// Loops until canceled or until the UI channel disconnects.
 fn run_demo_loop(
     filename: &str,
     tx: &Sender<TelemetrySample>,
+    is_running: &AtomicBool,
 ) -> Result<(), TelemetryError> {
     let file = File::open(filename).map_err(|e| TelemetryError::DemoFileOpen {
         path: filename.to_string(),
@@ -52,9 +57,13 @@ fn run_demo_loop(
     // Create a perfectly monotonic simulated timeline
     let mut simulated_time_ms: u32 = 0;
 
-    // Loop indefinitely
-    loop {
+    // Loop until stopped
+    while is_running.load(Ordering::Relaxed) {
         for line in &raw_lines {
+            if !is_running.load(Ordering::Relaxed) {
+                break;
+            }
+
             let mut fields = line.split(',');
 
             let mut next_f64 = || {
@@ -100,4 +109,6 @@ fn run_demo_loop(
             thread::sleep(Duration::from_millis(100)); 
         }
     }
+
+    Ok(())
 }

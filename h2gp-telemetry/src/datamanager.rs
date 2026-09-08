@@ -1,5 +1,6 @@
 #![allow(dead_code)]
-
+use std::fs::File;
+use std::io::Write;
 use crate::protocol::TelemetrySample;
 
 pub struct DataManager {
@@ -18,6 +19,37 @@ pub struct DataManager {
 }
 
 impl DataManager {
+    pub fn export_summary(&self) -> Result<(), std::io::Error> {
+        let mut file = File::create("summary.txt")?;
+        
+        // Safely extract the last sample without using .unwrap()
+        if let Some(last_sample) = self.history.last() {
+            let mut max_batt_t = -100.0f64;
+            let mut max_fc_t = -100.0f64;
+
+            for s in &self.history {
+                if s.batt.t > max_batt_t { max_batt_t = s.batt.t; }
+                if s.fc.t > max_fc_t { max_fc_t = s.fc.t; }
+            }
+
+            writeln!(file, "========================================")?;
+            writeln!(file, "       H2GP POST-RACE ANALYTICS         ")?;
+            writeln!(file, "========================================")?;
+            writeln!(file, "Total Battery Energy Used : {:.2} J", last_sample.batt.e)?;
+            writeln!(file, "Total Fuel Cell Energy    : {:.2} J", last_sample.fc.e)?;
+            writeln!(file, "Peak Battery Current      : {:.2} A", self.batt_i_mm.1)?;
+            writeln!(file, "Peak Fuel Cell Current    : {:.2} A", self.fc_i_mm.1)?;
+            writeln!(file, "Max Battery Temp          : {:.1} °C", max_batt_t)?;
+            writeln!(file, "Max Fuel Cell Temp        : {:.1} °C", max_fc_t)?;
+            writeln!(file, "Total Packets Received    : {}", self.history.len())?;
+            writeln!(file, "========================================")?;
+        } else {
+            writeln!(file, "No telemetry data available for summary.")?;
+        }
+
+        Ok(())
+    }
+
     pub fn new(max_history: usize) -> Self {
         let batch_size = (max_history / 10).clamp(10, 500); 
         
@@ -55,7 +87,7 @@ impl DataManager {
     pub fn add_data(&mut self, sample: TelemetrySample) {
         let elapsed_seconds = sample.timestamp_ms as f64 / 1000.0;
         
-        // FIX: Detect backward time jumps (e.g., Demo Mode restarting or MCU hard reset)
+        // Detect backward time jumps (e.g., Demo Mode restarting or MCU hard reset)
         // This prevents the Z-fold graph spaghetti.
         if let Some(&last_time) = self.time_labels.last() {
             if elapsed_seconds < last_time {

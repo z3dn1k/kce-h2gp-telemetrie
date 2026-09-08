@@ -1365,7 +1365,7 @@ dependencies = [
 
 [[package]]
 name = "h2gp-telemetry"
-version = "0.1.0"
+version = "1.0.2"
 dependencies = [
  "eframe",
  "egui_plot",

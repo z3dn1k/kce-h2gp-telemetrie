@@ -1,37 +1,64 @@
+//! # H2GP Telemetry Dashboard — Main Application Entry Point
+//!
+//! Provides the primary desktop application lifecycle, asynchronous data reception
+//! via `std::sync::mpsc`, anomaly detection logic, and the immediate-mode rendering loop
+//! using `eframe` / `egui`.
+
 mod protocol;
 mod serial;
 mod logger;
 mod datamanager;
 mod demo;
+mod error;
 mod ui;
 
 use eframe::egui;
 use protocol::TelemetrySample;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::collections::VecDeque;
-use ui::ChartTab;
+use ui::{ChartTab, FanMode};
 
+/// The primary state container for the H2GP telemetry dashboard.
+///
+/// Holds the active communication channels, recent incoming telemetry samples,
+/// the circular buffer manager (`DataManager`), UI configuration parameters,
+/// and a bounded FIFO queue of recent anomaly alerts.
 pub struct TelemetryApp {
+    /// Channel receiver for incoming telemetry samples from the serial or demo worker threads.
     pub rx: Receiver<TelemetrySample>,
+    /// Cloning sender handle passed to newly spawned worker threads (serial or demo).
     pub telemetry_tx: Sender<TelemetrySample>,
+    /// Optional uplink command sender for transmitting JSON commands to the car MCU.
     pub cmd_tx: Option<Sender<String>>,
+    /// The most recent main channel telemetry sample received from the car.
     pub latest_sample: Option<TelemetrySample>,
+    /// The most recent auxiliary telemetry sample (external temps, flags, fan duty).
     pub latest_aux: Option<protocol::Rev3AuxData>,
+    /// In-memory historical buffer manager with min/max tracking and moving averages.
     pub data_manager: datamanager::DataManager,
+    /// Currently configured serial port name (e.g., "COM3" or "/dev/ttyUSB0").
     pub port_name: String,
+    /// Connection indicator flag representing live telemetry stream presence.
     pub is_connected: bool,
 
-    pub fan_mode: String,
+    /// Selected fan operational mode (`Auto`, `Manual`, or `Off`).
+    pub fan_mode: FanMode,
+    /// Manual fan duty cycle percentage (0–100%).
     pub fan_duty: i32,
+    /// Three-letter driver identifier code sent to the onboard matrix display.
     pub driver_code: String,
     
+    /// Active telemetry parameter tab rendered in the history chart.
     pub chart_tab: ChartTab,
+    /// Time window width in seconds displayed on the horizontal axis of the chart.
     pub chart_window: f64,
     
+    /// Total count of valid telemetry packets decoded during the session.
     pub packet_count: u32,
+    /// Toggle flag controlling visibility of the bottom diagnostics & raw packet panel.
     pub show_diagnostics: bool,
     
-    // Bounded FIFO queue for the UI
+    /// Bounded FIFO queue (maximum 10 entries) of formatted anomaly alert messages for the UI.
     pub recent_anomalies: VecDeque<String>, 
 }
 
@@ -47,7 +74,7 @@ impl Default for TelemetryApp {
             data_manager: datamanager::DataManager::new(1200),
             port_name: "COM3".to_string(),
             is_connected: false,
-            fan_mode: "auto".to_string(),
+            fan_mode: FanMode::Auto,
             fan_duty: 70,
             driver_code: "SKL".to_string(),
             chart_tab: ChartTab::Voltage,

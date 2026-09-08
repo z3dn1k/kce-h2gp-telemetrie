@@ -1,14 +1,60 @@
+//! # Immediate-Mode User Interface & Visualization (`egui`)
+//!
+//! Renders the live telemetry dashboard at ~30 FPS:
+//! - **Top Toolbar**: Port selection, connection management, demo mode trigger, summary export.
+//! - **Central Panel**: Dual-column live metrics comparing Battery/Capacitor Bank vs. Hydrogen Fuel Cell.
+//! - **Real-time Chart**: Rolling history plots for Voltage, Current, Power, and Energy with selectable time windows.
+//! - **Side Panel**: Bounded live anomaly log for rapid pit-crew situational awareness.
+//! - **Bottom Panels**: Running averages, power-mix indicator, cooling fan controls, and raw packet diagnostics.
+
 use eframe::egui;
 use std::sync::mpsc;
 use crate::TelemetryApp;
 use crate::{serial, demo};
 
-#[derive(PartialEq)]
+/// Selectable measurement channels displayed on the real-time history plot.
+#[derive(PartialEq, Clone, Copy)]
 pub enum ChartTab {
+    /// Bus voltage curves for both channels in Volts (V).
     Voltage,
+    /// Current draw curves for both channels in Amperes (A).
     Current,
+    /// Instantaneous power curves in Watts (W).
     Power,
+    /// Cumulative electrical energy curves in Joules (J).
     Energy,
+}
+
+/// Commanded operational mode for the vehicle cooling fan subsystem.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FanMode {
+    /// Onboard microcontroller automatically regulates fan duty based on temperature probes.
+    Auto,
+    /// Driver/pit-crew manually commands fixed PWM duty percentage (0–100%).
+    Manual,
+    /// Cooling fan is explicitly disabled.
+    Off,
+}
+
+impl FanMode {
+    /// Returns the lowercase protocol string sent to the MCU in JSON commands.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FanMode::Auto => "auto",
+            FanMode::Manual => "manual",
+            FanMode::Off => "off",
+        }
+    }
+}
+
+impl std::fmt::Display for FanMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FanMode::Auto => write!(f, "AUTO"),
+            FanMode::Manual => write!(f, "MANUAL"),
+            FanMode::Off => write!(f, "OFF"),
+        }
+    }
 }
 
 // Helper to render large, clean metric blocks
@@ -45,9 +91,10 @@ fn render_mini_stat(ui: &mut egui::Ui, title: &str, val_str: String) {
     });
 }
 
+/// Primary dashboard layout and rendering function called every frame by `TelemetryApp::update`.
 pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
     // 1. Top Toolbar (Minimalist)
-    egui::TopBottomPanel::top("toolbar").frame(egui::Frame::none().fill(egui::Color32::from_rgb(15, 15, 15)).inner_margin(8.0)).show(ctx, |ui| {
+    egui::TopBottomPanel::top("toolbar").frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(15, 15, 15)).inner_margin(8.0)).show(ctx, |ui| {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("H2Gp KCE").color(egui::Color32::WHITE).size(14.0).strong());
             ui.add_space(20.0);
@@ -89,7 +136,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
 
    // 2. Diagnostics & Raw Data Footer (Absolute Bottom)
     if app.show_diagnostics {
-        egui::TopBottomPanel::bottom("diagnostics").frame(egui::Frame::none().fill(egui::Color32::from_rgb(5, 5, 5)).inner_margin(6.0)).show(ctx, |ui| {
+        egui::TopBottomPanel::bottom("diagnostics").frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(5, 5, 5)).inner_margin(6.0)).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if let Some(sample) = &app.latest_sample {
                     let rx_str = format!(
@@ -116,20 +163,22 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
     }
 
     // 3. Control Panel Footer
-    egui::TopBottomPanel::bottom("controls").frame(egui::Frame::none().fill(egui::Color32::from_rgb(12, 12, 12)).inner_margin(8.0)).show(ctx, |ui| {
+    egui::TopBottomPanel::bottom("controls").frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(12, 12, 12)).inner_margin(8.0)).show(ctx, |ui| {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("FAN").color(egui::Color32::from_gray(100)).size(10.0));
-            egui::ComboBox::from_id_source("fan_cb").selected_text(&app.fan_mode).show_ui(ui, |ui| {
-                ui.selectable_value(&mut app.fan_mode, "auto".to_string(), "AUTO");
-                ui.selectable_value(&mut app.fan_mode, "manual".to_string(), "MANUAL");
-                ui.selectable_value(&mut app.fan_mode, "off".to_string(), "OFF");
+            egui::ComboBox::from_id_salt("fan_cb").selected_text(app.fan_mode.to_string()).show_ui(ui, |ui| {
+                ui.selectable_value(&mut app.fan_mode, FanMode::Auto, "AUTO");
+                ui.selectable_value(&mut app.fan_mode, FanMode::Manual, "MANUAL");
+                ui.selectable_value(&mut app.fan_mode, FanMode::Off, "OFF");
             });
 
             ui.add(egui::Slider::new(&mut app.fan_duty, 0..=100).suffix("%"));
             if ui.button("SEND").clicked() {
                 if let Some(tx) = &app.cmd_tx {
-                    let cmd = if app.fan_mode == "manual" { format!(r#"{{"cmd":"fan","mode":"manual","duty":{}}}"#, app.fan_duty) } 
-                              else { format!(r#"{{"cmd":"fan","mode":"{}"}}"#, app.fan_mode) };
+                    let cmd = match app.fan_mode {
+                        FanMode::Manual => format!(r#"{{"cmd":"fan","mode":"manual","duty":{}}}"#, app.fan_duty),
+                        mode => format!(r#"{{"cmd":"fan","mode":"{}"}}"#, mode.as_str()),
+                    };
                     let _ = tx.send(cmd);
                 }
             }
@@ -150,7 +199,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
     });
 
     // 4. Mini Stats Row (Bottom)
-    egui::TopBottomPanel::bottom("stats_row").frame(egui::Frame::none().fill(egui::Color32::from_rgb(18, 18, 18)).inner_margin(12.0)).show(ctx, |ui| {
+    egui::TopBottomPanel::bottom("stats_row").frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(18, 18, 18)).inner_margin(12.0)).show(ctx, |ui| {
         if let Some(sample) = &app.latest_sample {
             ui.horizontal(|ui| {
                 let batt_v_avg = app.data_manager.compute_batt_voltage_avg(10);
@@ -189,7 +238,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
 
     // NEW: Live Anomaly Side Panel
     egui::SidePanel::right("anomaly_panel")
-        .frame(egui::Frame::none().fill(egui::Color32::from_rgb(15, 15, 15)).inner_margin(12.0))
+        .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(15, 15, 15)).inner_margin(12.0))
         .exact_width(220.0)
         .show(ctx, |ui| {
             ui.label(egui::RichText::new("⚠ LIVE ANOMALIES").color(egui::Color32::from_rgb(220, 80, 80)).strong().size(12.0));
@@ -208,9 +257,9 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
         });
 
     // 5. Central Data Dashboard
-    egui::CentralPanel::default().frame(egui::Frame::none().fill(egui::Color32::from_rgb(10, 10, 10)).inner_margin(12.0)).show(ctx, |ui| {
+    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(10, 10, 10)).inner_margin(12.0)).show(ctx, |ui| {
         if let Some(sample) = &app.latest_sample {
-            let bg_frame = egui::Frame::none().fill(egui::Color32::from_rgb(15, 15, 15)).rounding(4.0).inner_margin(12.0);
+            let bg_frame = egui::Frame::NONE.fill(egui::Color32::from_rgb(15, 15, 15)).corner_radius(4.0).inner_margin(12.0);
             
             bg_frame.show(ui, |ui| {
                 let total_width = ui.available_width();
@@ -385,13 +434,13 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                     plot_ui.line(
                         egui_plot::Line::new(egui_plot::PlotPoints::new(batt_points))
                             .name(format!("BATT {}", y_axis_label))
-                            .width(2.0)
+                            .width(2.0_f32)
                             .color(egui::Color32::from_rgb(60, 180, 220)) 
                     );
                     plot_ui.line(
                         egui_plot::Line::new(egui_plot::PlotPoints::new(fc_points))
                             .name(format!("FC {}", y_axis_label))
-                            .width(2.0)
+                            .width(2.0_f32)
                             .color(egui::Color32::from_rgb(220, 60, 60)) 
                     );
                 });

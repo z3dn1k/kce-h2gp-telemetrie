@@ -22,16 +22,25 @@ pub struct AppConfig {
     /// Number of recent samples used for Simple Moving Average (SMA) calculation.
     pub sma_window: usize,
 
-    /// Battery current threshold in Amperes triggering an overcurrent warning.
+    /// Battery current threshold in Amperes triggering a minor warning (yellow).
+    pub anomaly_batt_warn_current_a: f64,
+
+    /// Battery current threshold in Amperes triggering a critical overcurrent alarm (red).
     pub anomaly_batt_overcurrent_a: f64,
 
-    /// Fuel cell voltage sag threshold in Volts indicating hydrogen starvation.
+    /// Fuel cell voltage sag threshold in Volts triggering a minor voltage drop warning (yellow).
+    pub anomaly_fc_warn_vsag_v: f64,
+
+    /// Fuel cell voltage sag threshold in Volts indicating critical hydrogen starvation (red).
     pub anomaly_fc_vsag_v: f64,
 
     /// Fuel cell minimum voltage threshold in Volts to distinguish sag from disconnect.
     pub anomaly_fc_min_v: f64,
 
-    /// Battery temperature threshold in degrees Celsius triggering an overtemp warning.
+    /// Battery temperature threshold in degrees Celsius triggering a minor warm warning (yellow).
+    pub anomaly_batt_warn_temp_c: f64,
+
+    /// Battery temperature threshold in degrees Celsius triggering a critical overtemp alarm (red).
     pub anomaly_batt_overtemp_c: f64,
 
     /// Maximum number of formatted anomaly alerts retained in the UI side panel queue.
@@ -60,9 +69,12 @@ impl Default for AppConfig {
             default_port: "COM3".to_string(),
             buffer_capacity: 1200,
             sma_window: 10,
+            anomaly_batt_warn_current_a: 12.0,
             anomaly_batt_overcurrent_a: 15.0,
+            anomaly_fc_warn_vsag_v: 10.5,
             anomaly_fc_vsag_v: 9.0,
             anomaly_fc_min_v: 2.0,
+            anomaly_batt_warn_temp_c: 40.0,
             anomaly_batt_overtemp_c: 45.0,
             anomaly_queue_capacity: 10,
             ui_refresh_interval_ms: 33,

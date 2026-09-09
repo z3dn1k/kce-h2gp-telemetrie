@@ -177,7 +177,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             }
             
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new("[1-4 Grafy | Space Pauza | C Spojení | D Demo]").color(egui::Color32::from_gray(80)).size(10.0));
+                ui.label(egui::RichText::new("[1-4 Grafy | Space Pauza | R Recenter | C Spojení | D Demo]").color(egui::Color32::from_gray(80)).size(10.0));
             });
         });
     });
@@ -284,21 +284,47 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
         }
     });
 
-    // NEW: Live Anomaly Side Panel
+    // Live Anomaly Side Panel
     egui::SidePanel::right("anomaly_panel")
         .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(15, 15, 15)).inner_margin(12.0))
-        .exact_width(220.0)
+        .exact_width(240.0)
         .show(ctx, |ui| {
-            ui.label(egui::RichText::new("⚠ LIVE ANOMALIES").color(egui::Color32::from_rgb(220, 80, 80)).strong().size(12.0));
+            ui.label(egui::RichText::new("STAV SYSTÉMU").color(egui::Color32::from_gray(140)).size(10.0).strong());
+            ui.add_space(4.0);
+
+            // Overarching real-time vehicle health badge
+            let (status_title, status_desc, text_color, bg_color) = app.health_status.badge_info();
+            egui::Frame::NONE
+                .fill(bg_color)
+                .stroke(egui::Stroke::new(1.0_f32, text_color))
+                .corner_radius(4.0)
+                .inner_margin(8.0)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.vertical(|ui| {
+                        ui.label(egui::RichText::new(status_title).color(text_color).strong().size(12.0));
+                        ui.label(egui::RichText::new(status_desc).color(egui::Color32::from_gray(180)).size(10.0));
+                    });
+                });
+
             ui.add_space(10.0);
-            
+            ui.separator();
+            ui.add_space(8.0);
+
+            ui.label(egui::RichText::new("HISTORIE ANOMÁLIÍ").color(egui::Color32::from_gray(140)).size(10.0).strong());
+            ui.add_space(6.0);
+
             if app.recent_anomalies.is_empty() {
-                ui.label(egui::RichText::new("No anomalies detected.").color(egui::Color32::from_gray(100)));
+                ui.label(egui::RichText::new("Žádné zaznamenané anomálie.").color(egui::Color32::from_gray(100)).size(11.0));
             } else {
                 egui::ScrollArea::vertical().stick_to_bottom(true).show(ui, |ui| {
                     for anom in &app.recent_anomalies {
-                        ui.label(egui::RichText::new(anom).color(egui::Color32::from_rgb(220, 180, 50)).monospace().size(11.0));
-                        ui.add_space(6.0);
+                        let color = match anom.severity {
+                            crate::anomaly::AnomalySeverity::Critical => egui::Color32::from_rgb(255, 75, 75),
+                            crate::anomaly::AnomalySeverity::Warning => egui::Color32::from_rgb(255, 205, 50),
+                        };
+                        ui.label(egui::RichText::new(&anom.ui_text).color(color).monospace().size(11.0));
+                        ui.add_space(4.0);
                     }
                 });
             }
@@ -420,14 +446,22 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
 
             ui.add_space(10.0);
 
-            // Chart Navigation & Rolling Window Selector
+            // Chart Navigation, Window & Zoom Toolbar
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("GRAPHS").color(egui::Color32::from_gray(120)).size(14.0).strong());
                 ui.add_space(15.0);
-                ui.selectable_value(&mut app.chart_tab, ChartTab::Voltage, "[1] NAPĚTÍ (V)");
-                ui.selectable_value(&mut app.chart_tab, ChartTab::Current, "[2] PROUD (A)");
-                ui.selectable_value(&mut app.chart_tab, ChartTab::Power, "[3] VÝKON (W)");
-                ui.selectable_value(&mut app.chart_tab, ChartTab::Energy, "[4] ENERGIE (J)");
+                if ui.selectable_value(&mut app.chart_tab, ChartTab::Voltage, "[1] NAPĚTÍ (V)").clicked() {
+                    app.recenter_chart();
+                }
+                if ui.selectable_value(&mut app.chart_tab, ChartTab::Current, "[2] PROUD (A)").clicked() {
+                    app.recenter_chart();
+                }
+                if ui.selectable_value(&mut app.chart_tab, ChartTab::Power, "[3] VÝKON (W)").clicked() {
+                    app.recenter_chart();
+                }
+                if ui.selectable_value(&mut app.chart_tab, ChartTab::Energy, "[4] ENERGIE (J)").clicked() {
+                    app.recenter_chart();
+                }
 
                 if app.is_paused {
                     ui.add_space(10.0);
@@ -439,14 +473,59 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                     );
                 }
 
-                ui.add_space(25.0);
+                ui.add_space(20.0);
                 ui.label(egui::RichText::new("WINDOW:").color(egui::Color32::from_gray(120)).size(10.0).strong());
-                ui.selectable_value(&mut app.chart_window, 5.0, "5s");   
-                ui.selectable_value(&mut app.chart_window, 10.0, "10s"); 
-                ui.selectable_value(&mut app.chart_window, 15.0, "15s");
-                ui.selectable_value(&mut app.chart_window, 30.0, "30s");
-                ui.selectable_value(&mut app.chart_window, 60.0, "60s");
-                ui.selectable_value(&mut app.chart_window, 120.0, "2m");
+                if ui.selectable_value(&mut app.chart_window, 5.0, "5s").clicked() { app.recenter_chart(); }
+                if ui.selectable_value(&mut app.chart_window, 10.0, "10s").clicked() { app.recenter_chart(); }
+                if ui.selectable_value(&mut app.chart_window, 15.0, "15s").clicked() { app.recenter_chart(); }
+                if ui.selectable_value(&mut app.chart_window, 30.0, "30s").clicked() { app.recenter_chart(); }
+                if ui.selectable_value(&mut app.chart_window, 60.0, "60s").clicked() { app.recenter_chart(); }
+                if ui.selectable_value(&mut app.chart_window, 120.0, "2m").clicked() { app.recenter_chart(); }
+
+                ui.add_space(15.0);
+                ui.separator();
+                ui.add_space(10.0);
+
+                let is_zoomed = if app.recenter_chart {
+                    false
+                } else {
+                    egui_plot::PlotMemory::load(ctx, egui::Id::new("history_plot"))
+                        .map(|m| !m.auto_bounds.x)
+                        .unwrap_or(false)
+                };
+
+                if is_zoomed {
+                    ui.label(egui::RichText::new("🔍 ZOOM").color(egui::Color32::from_rgb(255, 200, 50)).size(11.0).strong());
+                } else {
+                    ui.label(egui::RichText::new("● LIVE").color(egui::Color32::from_rgb(0, 220, 100)).size(11.0).strong());
+                }
+
+                if ui.button(egui::RichText::new("➕ ZOOM IN").size(11.0))
+                    .on_hover_text("Přiblížit graf k pozici kurzoru nebo středu (nebo použijte kolečko myši)")
+                    .clicked()
+                {
+                    app.zoom_chart(1.4);
+                }
+
+                if ui.button(egui::RichText::new("➖ ZOOM OUT").size(11.0))
+                    .on_hover_text("Oddálit graf od pozice kurzoru nebo středu (nebo použijte kolečko myši)")
+                    .clicked()
+                {
+                    app.zoom_chart(0.71);
+                }
+
+                let recenter_btn = egui::Button::new(
+                    egui::RichText::new("⟲ RECENTER")
+                        .color(if is_zoomed { egui::Color32::from_rgb(80, 220, 255) } else { egui::Color32::WHITE })
+                        .size(11.0)
+                        .strong()
+                );
+                if ui.add(recenter_btn)
+                    .on_hover_text("Vrátit se zpět na živý generovaný graf (Klávesa: R nebo dvojklik na graf)")
+                    .clicked()
+                {
+                    app.recenter_chart();
+                }
             });
             ui.add_space(5.0);
 
@@ -454,13 +533,24 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             let history = app.data_manager.history();
             let times = app.data_manager.time_labels();
 
-            let mut batt_points = Vec::new();
-            let mut fc_points = Vec::new();
+            let is_zoomed = if app.recenter_chart {
+                false
+            } else {
+                egui_plot::PlotMemory::load(ctx, egui::Id::new("history_plot"))
+                    .map(|m| !m.auto_bounds.x)
+                    .unwrap_or(false)
+            };
 
-            let latest_time = times.last().copied().unwrap_or(0.0);
-            let time_threshold = latest_time - app.chart_window;
+            let start_idx = if is_zoomed {
+                0
+            } else {
+                let latest_time = times.last().copied().unwrap_or(0.0);
+                let time_threshold = latest_time - app.chart_window;
+                times.partition_point(|&t| t < time_threshold)
+            };
 
-            let start_idx = times.partition_point(|&t| t < time_threshold);
+            let mut batt_points = Vec::with_capacity(times.len().saturating_sub(start_idx));
+            let mut fc_points = Vec::with_capacity(times.len().saturating_sub(start_idx));
 
             for i in start_idx..times.len() {
                 let t = times[i];
@@ -483,25 +573,55 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                 ChartTab::Energy  => "ENERGIE (J)",
             };
 
-            egui_plot::Plot::new("history_plot")
+            let mut plot = egui_plot::Plot::new("history_plot")
                 .height(ui.available_height())
                 .show_background(false)
                 .show_axes([false, true]) 
                 .legend(egui_plot::Legend::default())
-                .show(ui, |plot_ui| {
-                    plot_ui.line(
-                        egui_plot::Line::new(egui_plot::PlotPoints::new(batt_points))
-                            .name(format!("BATT {}", y_axis_label))
-                            .width(2.0_f32)
-                            .color(egui::Color32::from_rgb(60, 180, 220)) 
-                    );
-                    plot_ui.line(
-                        egui_plot::Line::new(egui_plot::PlotPoints::new(fc_points))
-                            .name(format!("FC {}", y_axis_label))
-                            .width(2.0_f32)
-                            .color(egui::Color32::from_rgb(220, 60, 60)) 
-                    );
-                });
+                .allow_zoom(true)
+                .allow_drag(true)
+                .allow_scroll(true)
+                .allow_boxed_zoom(true)
+                .allow_double_click_reset(true)
+                .coordinates_formatter(
+                    egui_plot::Corner::LeftBottom,
+                    egui_plot::CoordinatesFormatter::new(move |pt, _| {
+                        format!("t = {:.1} s  |  {:.2}", pt.x, pt.y)
+                    }),
+                );
+
+            if app.recenter_chart {
+                plot = plot.reset();
+                app.recenter_chart = false;
+            }
+
+            plot.show(ui, |plot_ui| {
+                if let Some(factor) = app.pending_zoom_factor.take() {
+                    if let Some(hover) = plot_ui.pointer_coordinate() {
+                        plot_ui.zoom_bounds(egui::Vec2::splat(factor), hover);
+                    } else {
+                        let bounds = plot_ui.plot_bounds();
+                        let center = egui_plot::PlotPoint::new(
+                            (bounds.min()[0] + bounds.max()[0]) * 0.5,
+                            (bounds.min()[1] + bounds.max()[1]) * 0.5,
+                        );
+                        plot_ui.zoom_bounds(egui::Vec2::splat(factor), center);
+                    }
+                }
+
+                plot_ui.line(
+                    egui_plot::Line::new(egui_plot::PlotPoints::new(batt_points))
+                        .name(format!("BATT {}", y_axis_label))
+                        .width(2.0_f32)
+                        .color(egui::Color32::from_rgb(60, 180, 220)) 
+                );
+                plot_ui.line(
+                    egui_plot::Line::new(egui_plot::PlotPoints::new(fc_points))
+                        .name(format!("FC {}", y_axis_label))
+                        .width(2.0_f32)
+                        .color(egui::Color32::from_rgb(220, 60, 60)) 
+                );
+            });
         } else {
             ui.centered_and_justified(|ui| {
                 ui.heading("Waiting for telemetry stream... Click CONNECT for COM port or DEMO MODE for testing.");

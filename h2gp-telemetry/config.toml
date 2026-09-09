@@ -15,16 +15,25 @@ buffer_capacity = 1200
 # Moving average window size (SMA) for noise attenuation
 sma_window = 10
 
-# Battery overcurrent warning threshold in Amperes (servo stall detection)
+# Battery current warning threshold in Amperes (elevated load / acceleration)
+anomaly_batt_warn_current_a = 12.0
+
+# Battery overcurrent critical threshold in Amperes (servo stall detection)
 anomaly_batt_overcurrent_a = 15.0
 
-# Fuel cell voltage sag threshold in Volts (hydrogen starvation warning)
+# Fuel cell voltage drop warning threshold in Volts (minor pressure drop)
+anomaly_fc_warn_vsag_v = 10.5
+
+# Fuel cell voltage sag critical threshold in Volts (hydrogen starvation warning)
 anomaly_fc_vsag_v = 9.0
 
 # Minimum fuel cell voltage in Volts to distinguish sag from disconnect/idle
 anomaly_fc_min_v = 2.0
 
-# Battery overtemperature warning threshold in degrees Celsius
+# Battery warm temperature warning threshold in degrees Celsius (elevated heat)
+anomaly_batt_warn_temp_c = 40.0
+
+# Battery overtemperature critical threshold in degrees Celsius (thermal hazard)
 anomaly_batt_overtemp_c = 45.0
 
 # Maximum number of alerts retained in the UI live anomaly alert side panel

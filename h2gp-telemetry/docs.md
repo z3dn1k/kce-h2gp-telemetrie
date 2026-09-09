@@ -341,21 +341,27 @@ Projekt obsahuje rozsáhlou sadu automatizovaných unit testů v souborech `prot
   - Round-trip serializace a deserializace formátu TOML.
   - Zotavení z neplatného TOML souboru.
   - Uložení a načtení konfigurace z disku.
-- **`anomaly::tests` (6 testů)**:
-  - Detekce nadproudu baterie a ignorování bezpečných proudů.
-  - Detekce poklesu napětí palivového článku a ignorování odpojeného článku (< 2.0 V).
-  - Detekce přehřátí baterie.
-  - Detekce zkratovacího příznaku v pomocné telemetrii.
 - **`serial::tests` (1 test)**:
   - Bezpečná auto-detekce sériových portů v systému bez rizika pádu či paniky.
-- **`main::tests` (5 testů)**:
+- **`anomaly::tests` (9 testů)**:
+  - Detekce kritického nadproudu baterie (> 15.0 A) a varování při zvýšené zátěži (> 12.0 A), včetně ignorování bezpečných hodnot.
+  - Detekce kritického propadu napětí palivového článku (< 9.0 V) a varování při poklesu (< 10.5 V), včetně ignorování odpojeného článku (< 2.0 V).
+  - Detekce kritického přehřátí baterie (> 45.0 °C) a varování při zvýšené teplotě (> 40.0 °C).
+  - Detekce hardwarového příznaku zkratu palivového článku v pomocné telemetrii (`FC SHORT`).
+- **`demo::tests` (2 testy)**:
+  - Správnost parsování jednotlivého CSV řádku `parse_csv_line`.
+  - Komplexní validace demo datasetu: minimálně 500 řádků, výskyt rekuperace a spolehlivá detekce všech 3 anomálií (`BattOvercurrent`, `FcVoltageSag`, `BattOvertemp`).
+- **`main::tests` (8 testů)**:
   - Funkčnost vícestavového automatu spojení `ConnectionState::is_connected`.
   - Formátování textu stavu a stopek doby spojení (`status_text`).
   - Přepínání stavu pozastavení grafu (`toggle_pause`).
   - Čistý reset metriky PPS a stavu při odpojení (`disconnect`).
   - Ohraničená FIFO kapacita fronty anomálií a správná rotace prvků.
+  - Nastavení požadavku na vycentrování grafu (`recenter_chart`).
+  - Požadavek na změnu měřítka grafu (`zoom_chart`).
+  - Barevnost a textové formátování vizitek celkového stavu systému `SystemHealthStatus::badge_info`.
 
-**Výsledek verifikace**: Všech **45 testů** prochází úspěšně. Nástroj `cargo clippy` hlásí **0 varování** a generování HTML dokumentace `cargo doc --no-deps` probíhá s **0 chybami**.
+**Výsledek verifikace**: Všech **53 testů** prochází úspěšně. Nástroj `cargo clippy` hlásí **0 varování** a generování HTML dokumentace `cargo doc --no-deps` probíhá s **0 chybami**.
 
 ---
 
@@ -434,4 +440,112 @@ Repozitář byl vybaven kompletní průvodní dokumentací obsahující:
 - Technické odůvodnění výběru jednotlivých crate (`eframe`, `serialport`, `thiserror`, `toml`, `image`).
 - Přehlednou tabulku klávesových zkratek.
 - Návod pro spuštění v demo režimu a spuštění kompletní verifikační sady testů.
+
+---
+
+## 12. Realistická offline simulace a pokročilá navigace v grafech (Fáze 11)
+
+### 12.1 Fyzikálně konzistentní závodní dataset (`data.csv`)
+Pro účely prezentace, testování a demonstrace bez nutnosti zapojení reálného vozidla byl vytvořen realistický telemetrický dataset o délce 80 sekund (800 vzorků při frekvenci 10 Hz), který nahrazuje původní jednoduchou syntetickou sinusoidu:
+1. **Fyzikální model**:
+   - Všechny elektrické veličiny striktně dodržují fyzikální vztahy: $P = V \times I$ pro každý vzorek.
+   - Napětí akumulátoru simuluje vnitřní impedanci článků ($R_{int} \approx 0.078\,\Omega$): $V_{batt} = V_{oc} - I_{batt} \cdot R_{int}$.
+   - Bočníkové napětí $V_{shunt}$ odpovídá měřicímu odporu $15\,\text{m}\Omega$.
+   - Kumulovaná energie $E$ (J) a náboj $Ah$ jsou integrovány v reálném čase podle vzorce $E_k = E_{k-1} + P \cdot \Delta t$.
+   - Teplotní dynamika modeluje Jouleovo ohřívání článků ($P_{loss} = R_{int} \cdot I^2$) a chlazení proudem vzduchu.
+2. **Rekuperační brzdění**:
+   - Při brzdění před šikanami (čas $t \approx 14.0\text{s} - 18.0\text{s}$ a $72.0\text{s} - 75.0\text{s}$) klesá proud akumulátoru do záporných hodnot ($I_{batt} \approx -1.25\,\text{A}$), což demonstruje rekuperační dobíjení a změnu stavu vozidla.
+3. **Zahrnuté závodní anomálie**:
+   - **Pokles napětí palivového článku (`FC V-SAG`)**: V čase $t \approx 9.5\text{s} - 12.0\text{s}$ při plné akceleraci na rovince dochází k vyčerpání přetlaku vodíku na difuzní vrstvě článku. Napětí článku kolabuje z $13.8\,\text{V}$ na $7.82\,\text{V}$, což okamžitě aktivuje anomální pravidlo. V čase $12.0\,\text{s}$ zareaguje odvzdušňovací ventil (purge valve) a napětí se vrací do nominálního rozsahu.
+   - **Nadproud akumulátoru (`BATT OVERCURRENT`)**: V čase $t \approx 21.5\text{s} - 24.0\text{s}$ při prudkém výjezdu ze zatáčky dojde k mechanickému zablokování serva řízení v plném rejdu. Proud akumulátoru vyskočí na $16.85\,\text{A}$ (limit $15.0\,\text{A}$), což vyvolá okamžitou výstrahu v UI i zápis do `anomalies.log`.
+   - **Přehřátí akumulátoru (`BATT OVERTEMP`)**: V čase $t \approx 48.5\text{s} - 53.5\text{s}$ po sérii rychlých esíček vystoupá teplota akumulátorových článků na $46.8\,^\circ\text{C}$ (bezpečnostní limit $45.0\,^\circ\text{C}$).
+
+### 12.2 Interaktivní Zoom do zvoleného bodu
+Grafická komponenta `egui_plot` byla rozšířena o interaktivní navigaci:
+- **Zoom kolečkem myši**: Otáčením kolečka myši nad grafem dochází k plynulému zvětšení nebo zmenšení přímo okolo pozice kurzoru myši.
+- **Obdélníkový výběr (Box Zoom)**: Stiskem a tažením pravého tlačítka myši (Secondary Pointer Button) může operátor vymezit obdélníkový výřez a okamžitě přiblížit libovolnou sekci grafu.
+- **Tlačítka v nástrojové liště**: Tlačítka `➕ ZOOM IN` (zvětšení 1.4×) a `➖ ZOOM OUT` (zmenšení 0.71×) škálují pohled okolo pozice kurzoru, případně okolo středu grafu.
+- **Inspekce souřadnic (`CoordinatesFormatter`)**: V levém dolním rohu grafu se v reálném čase zobrazuje přesná časová a hodnotová souřadnice bodu pod kurzorem: `t = 22.4 s | 16.85`.
+
+### 12.3 Inteligentní správa vyrovnávací paměti při zvětšení
+Zásadním architektonickým problémem při živém vykreslování bývá mizení starých bodů:
+- V běžném režimu živého sledování (`● LIVE`) se do grafu posílá pouze plovoucí časové okno (`start_idx..times.len()`), aby automatické ohraničení (`auto_bounds: [true, true]`) drželo požadovanou šířku (např. 30 s).
+- Jakmile uživatel graf přiblíží nebo posune, `egui_plot` nastaví `auto_bounds.x = false` a v UI se rozsvítí zlatý indikátor `🔍 ZOOM`.
+- V tomto stavu aplikace automaticky přepne na **plný historický buffer** (`start_idx = 0`). Díky tomu může telemetrický inženýr zkoumat libovolný úsek z celé zaznamenané historie (až 1200 vzorků), aniž by mu starší body mizely z obrazovky pod rukama.
+
+### 12.4 Návrat k živému toku (`⟲ RECENTER`)
+Pro okamžitý návrat z inspekčního režimu zpět k živému toku dat:
+- Kliknutím na tlačítko `⟲ RECENTER` v liště grafu.
+- Stiskem klávesy **R** na klávesnici.
+- Dvojitým kliknutím myši (Dbl-Click) do plochy grafu.
+- Kliknutím na libovolnou předvolbu časového okna (`5s`, `10s`, `15s`, `30s`, `60s`, `2m`) nebo přepnutím záložky grafu (`[1] NAPĚTÍ`, `[2] PROUD` apod.).
+
+Aplikace interně zavolá metodu `Plot::reset()`, která zahodí manuální transformaci, obnoví `auto_bounds: [true, true]`, přepne zpět na plovoucí časové okno a graf plynule pokračuje v automatickém posuvu s nově přicházejícími daty.
+
+---
+
+## 13. Třístupňový systém závažnosti anomálií a barevná diagnostika v reálném čase (Fáze 12)
+
+### 13.1 Motivace a bezpečnostní požadavky
+V závodním speciálu H2GP s hybridním vodíkovým pohonem je zásadní rozlišovat mezi provozními odchylkami (které pouze vyžadují zvýšenou pozornost jezdce či telemetrika) a bezprostředním rizikem poškození vozidla (např. požár či zničení drahých LiPo článků, zkrat palivového článku nebo nevratná degradace membrány).
+
+Původní binární detekce (anomálie nastala / nenastala) byla nahrazena třístupňovým stavovým modelem s okamžitou barevnou signalizací:
+1. **Nominal (`SystemHealthStatus::Nominal`) — Zelená (`#00E676`)**:
+   - V aktuálním telemetrickém vzorku se nevyskytuje žádná odchylka ani anomálie.
+   - V UI svítí badge: `● BEZ ANOMÁLIÍ` s doprovodným textem *"Všechny subsystémy v normě"*.
+2. **Warning (`SystemHealthStatus::Warning` / `AnomalySeverity::Warning`) — Žlutá (`#FFEA00`)**:
+   - Provozní parametry se blíží mezním hodnotám nebo vykazují zvýšené namáhání.
+   - Nevyžaduje okamžité odstavení vozidla, ale signalizuje nutnost úpravy jízdního stylu (např. ubrat plyn nebo zvýšit otáčky chladicích ventilátorů).
+   - V UI svítí badge: `⚠ VAROVÁNÍ (MINOR)` s doprovodným textem *"Zvýšená zátěž nebo teplota"*.
+3. **Critical (`SystemHealthStatus::Critical` / `AnomalySeverity::Critical`) — Červená (`#FF1744`)**:
+   - Akutní riziko zkratu, nevratného poškození akumulátoru, hladovění článku (cell starvation) nebo požáru.
+   - Vyžaduje okamžitou reakci týmu (např. nouzové odstavení, přepnutí do manuálního chlazení, kontrolu serva).
+   - V UI svítí badge: `🔴 KRITICKÉ RIZIKO` s doprovodným textem *"Riziko poškození, zkrat nebo přehřátí!"*.
+
+### 13.2 Konfigurovatelné prahové hodnoty (`config.toml` & `src/config.rs`)
+Všechny rozhodovací meze jsou plně parametrizovatelné v konfiguračním souboru `config.toml` a deserializovány do struktury `Config`:
+
+| Fyzikální veličina | Žluté varování (`Warning`) | Červené riziko (`Critical`) | Fyzikální odůvodnění |
+| :--- | :--- | :--- | :--- |
+| **Proud akumulátoru ($I_{batt}$)** | $> 12.0\,\text{A}$ (`anomaly_batt_warn_current_a`) | $> 15.0\,\text{A}$ (`anomaly_batt_crit_current_a`) | $12\,\text{A}$ značí vysoký odběr na výjezdu ze zatáčky; $15\,\text{A}$ představuje mezní přetížení baterie či mechanické zablokování pohonu. |
+| **Napětí palivového článku ($V_{fc}$)** | $< 10.5\,\text{V}$ (`anomaly_fc_warn_vsag_v`) | $< 9.0\,\text{V}$ (`anomaly_fc_crit_vsag_v`) | $10.5\,\text{V}$ indikuje pokles tlaku vodíku; $< 9.0\,\text{V}$ je kritický propad hrozící zničením difuzní vrstvy článků (hodnoty $< 2.0\,\text{V}$ jsou ignorovány jako odpojený článek). |
+| **Teplota akumulátoru ($T_{batt}$)** | $> 40.0\,^\circ\text{C}$ (`anomaly_batt_warn_temp_c`) | $> 45.0\,^\circ\text{C}$ (`anomaly_batt_crit_temp_c`) | $40\,^\circ\text{C}$ je varování pro aktivaci nuceného chlazení; $45\,^\circ\text{C}$ je maximální povolená teplota LiPo článků dle pravidel H2GP. |
+| **Zkrat článku (`fc_short`)** | — | `aux.flags & 0x01 != 0` | Hardwarový příznak aktivovaného zkratovacího obvodu palivového článku. Vždy kritická anomálie. |
+
+### 13.3 Architektura detekčního enginu a prioritizace výstrah (`src/anomaly.rs`)
+Aby operátor nebyl zahlcen redundantními hlášeními (např. aby při proudu $16.5\,\text{A}$ nevyskakovala zároveň žlutá zpráva o $12\,\text{A}$ a červená o $15\,\text{A}$), detekční engine používá striktní kaskádové vyhodnocení:
+```rust
+// Kaskádová prioritizace zamezující duplicitním výstrahám:
+if sample.batt.i > config.anomaly_batt_crit_current_a {
+    anomalies.push(Anomaly {
+        kind: AnomalyKind::BattOvercurrent,
+        severity: AnomalySeverity::Critical,
+        value: sample.batt.i,
+        threshold: config.anomaly_batt_crit_current_a,
+    });
+} else if sample.batt.i > config.anomaly_batt_warn_current_a {
+    anomalies.push(Anomaly {
+        kind: AnomalyKind::BattHighLoad,
+        severity: AnomalySeverity::Warning,
+        value: sample.batt.i,
+        threshold: config.anomaly_batt_warn_current_a,
+    });
+}
+```
+Kritická úroveň má vždy přednost a zcela potlačuje varovný stupeň na stejném senzoru.
+
+### 13.4 Uživatelské rozhraní v reálném čase (`src/ui.rs` a `src/main.rs`)
+V pravém diagnostickém panelu jsou aplikovány následující prvky:
+1. **Přehledový stavový panel (`STAV SYSTÉMU`)**:
+   - Umístěn na vrcholu bočního panelu.
+   - Rámeček i text dynamicky mění barvu pozadí i ohraničení:
+     - Zelená: `● BEZ ANOMÁLIÍ`
+     - Žlutá: `⚠ VAROVÁNÍ (MINOR)`
+     - Červená: `🔴 KRITICKÉ RIZIKO`
+   - Okamžitě reaguje na každý příchozí telemetrický vzorek. Pokud anomálie pomine, panel se ihned vrací do zeleného stavu.
+2. **Barevně kódovaná historie anomálií (`HISTORIE ANOMÁLIÍ`)**:
+   - Každý záznam v rolovacím seznamu si uchovává přesnou časovou značku (`[MM:SS.s]`), textovou identifikaci a závažnost `severity`.
+   - Menší chyby jsou vykresleny jasně žlutým písmem s prefixem `[WARN]`.
+   - Závažná rizika jsou vykreslena jasně červeným písmem s prefixem `[CRIT]`.
+
 

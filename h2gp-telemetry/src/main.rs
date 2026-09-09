@@ -64,6 +64,51 @@ impl ConnectionState {
     }
 }
 
+/// Overall live operational health status of the vehicle telemetry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemHealthStatus {
+    /// All parameters are within safe nominal thresholds (Green).
+    Nominal,
+    /// One or more parameters have breached minor warning thresholds (Yellow).
+    Warning,
+    /// One or more parameters have breached critical high-risk safety thresholds (Red).
+    Critical,
+}
+
+impl SystemHealthStatus {
+    /// Formatted status badge title, subtitle, and color palette for UI rendering.
+    pub fn badge_info(&self) -> (&'static str, &'static str, egui::Color32, egui::Color32) {
+        match self {
+            SystemHealthStatus::Nominal => (
+                "● BEZ ANOMÁLIÍ",
+                "Všechny systémy nominální",
+                egui::Color32::from_rgb(0, 220, 100),       // Bright green
+                egui::Color32::from_rgb(12, 38, 20),        // Dark green frame fill
+            ),
+            SystemHealthStatus::Warning => (
+                "⚠ VAROVÁNÍ (MINOR)",
+                "Zvýšené zatížení / teplota",
+                egui::Color32::from_rgb(255, 205, 40),      // Bright amber/yellow
+                egui::Color32::from_rgb(45, 36, 8),         // Dark amber frame fill
+            ),
+            SystemHealthStatus::Critical => (
+                "🔴 KRITICKÉ RIZIKO",
+                "Nadproud / Pokles / Zkrat",
+                egui::Color32::from_rgb(255, 75, 75),       // Bright red
+                egui::Color32::from_rgb(50, 14, 14),        // Dark red frame fill
+            ),
+        }
+    }
+}
+
+/// A stored anomaly record in the UI history FIFO queue.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnomalyRecord {
+    pub timestamp_ms: u32,
+    pub severity: anomaly::AnomalySeverity,
+    pub ui_text: String,
+}
+
 /// The primary state container for the H2GP telemetry dashboard.
 ///
 /// Holds the active communication channels, recent incoming telemetry samples,
@@ -121,8 +166,16 @@ pub struct TelemetryApp {
     /// Optional transient toast notification showing the status of screenshots (message, display_until).
     pub screenshot_toast: Option<(String, Instant)>,
     
-    /// Bounded FIFO queue of formatted anomaly alert messages for the UI.
-    pub recent_anomalies: VecDeque<String>, 
+    /// Bounded FIFO queue of formatted anomaly alert records for the UI.
+    pub recent_anomalies: VecDeque<AnomalyRecord>,
+
+    /// Current live overall health status evaluated from the latest incoming telemetry sample.
+    pub health_status: SystemHealthStatus,
+
+    /// Flag requesting the history chart to reset its viewport and restore auto-following of live incoming samples.
+    pub recenter_chart: bool,
+    /// Pending zoom factor to apply to the chart bounds (zoom in > 1.0, zoom out < 1.0).
+    pub pending_zoom_factor: Option<f32>,
 }
 
 impl Default for TelemetryApp {
@@ -169,6 +222,9 @@ impl Default for TelemetryApp {
             last_pps_update: Instant::now(),
             screenshot_toast: None,
             recent_anomalies: VecDeque::with_capacity(anom_cap),
+            health_status: SystemHealthStatus::Nominal,
+            recenter_chart: false,
+            pending_zoom_factor: None,
         }
     }
 }
@@ -207,12 +263,13 @@ impl TelemetryApp {
         demo::start_demo_thread("data.csv", self.telemetry_tx.clone(), running);
     }
 
-    /// Disconnects any active communication threads and resets PPS.
+    /// Disconnects any active communication threads and resets PPS and health status.
     pub fn disconnect(&mut self) {
         self.stop_worker();
         self.connection_state = ConnectionState::Disconnected;
         self.pps = 0.0;
         self.pps_counter = 0;
+        self.health_status = SystemHealthStatus::Nominal;
     }
 
     /// Toggles the pause state of graph data streaming.
@@ -220,15 +277,33 @@ impl TelemetryApp {
         self.is_paused = !self.is_paused;
     }
 
+    /// Resets the history chart viewport to auto-bounds, restoring live rolling stream tracking.
+    pub fn recenter_chart(&mut self) {
+        self.recenter_chart = true;
+    }
+
+    /// Requests a zoom modification on the history chart bounds.
+    pub fn zoom_chart(&mut self, factor: f32) {
+        self.pending_zoom_factor = Some(factor);
+    }
+
     /// Logs an anomaly event both to the persistent file and to the UI FIFO alert queue.
     fn record_anomaly(&mut self, anom: &anomaly::Anomaly) {
-        logger::log_anomaly(anom.timestamp_ms, &anom.value_str, anom.cause);
+        logger::log_anomaly(
+            anom.timestamp_ms,
+            &format!("[{}] {}", anom.severity.tag_prefix(), anom.value_str),
+            anom.cause,
+        );
         
         let log_str = anom.format_ui();
         if self.recent_anomalies.len() >= self.config.anomaly_queue_capacity {
             self.recent_anomalies.pop_front();
         }
-        self.recent_anomalies.push_back(log_str);
+        self.recent_anomalies.push_back(AnomalyRecord {
+            timestamp_ms: anom.timestamp_ms,
+            severity: anom.severity,
+            ui_text: log_str,
+        });
     }
 }
 
@@ -253,6 +328,8 @@ impl eframe::App for TelemetryApp {
                     self.chart_tab = ChartTab::Energy;
                 } else if i.key_pressed(egui::Key::Space) {
                     self.toggle_pause();
+                } else if i.key_pressed(egui::Key::R) {
+                    self.recenter_chart();
                 } else if i.key_pressed(egui::Key::C) {
                     if self.connection_state.is_connected() {
                         self.disconnect();
@@ -309,9 +386,22 @@ impl eframe::App for TelemetryApp {
             self.pps_counter += 1;
             
             // Evaluate configured anomaly rules via the standalone anomaly engine
-            for anom in anomaly::detect_anomalies(&sample, &self.config) {
-                self.record_anomaly(&anom);
+            let detected = anomaly::detect_anomalies(&sample, &self.config);
+            let mut highest_severity = None;
+            for anom in &detected {
+                match anom.severity {
+                    anomaly::AnomalySeverity::Critical => {
+                        highest_severity = Some(SystemHealthStatus::Critical);
+                    }
+                    anomaly::AnomalySeverity::Warning => {
+                        if highest_severity.is_none() {
+                            highest_severity = Some(SystemHealthStatus::Warning);
+                        }
+                    }
+                }
+                self.record_anomaly(anom);
             }
+            self.health_status = highest_severity.unwrap_or(SystemHealthStatus::Nominal);
 
             if sample.has_channel_data {
                 if !self.is_paused {
@@ -434,6 +524,7 @@ mod tests {
             let anom = anomaly::Anomaly {
                 timestamp_ms: i as u32 * 100,
                 kind: anomaly::AnomalyKind::BattOvercurrent,
+                severity: anomaly::AnomalySeverity::Critical,
                 value_str: format!("{} A", i),
                 cause: "overcurrent",
             };
@@ -443,6 +534,38 @@ mod tests {
         assert_eq!(app.recent_anomalies.len(), cap);
         // The last element should be the latest anomaly
         let last = app.recent_anomalies.back().unwrap();
-        assert!(last.contains("BATT OVERCURRENT"));
+        assert!(last.ui_text.contains("BATT OVERCURRENT"));
+        assert_eq!(last.severity, anomaly::AnomalySeverity::Critical);
+    }
+
+    #[test]
+    fn telemetry_app_recenter_chart() {
+        let mut app = TelemetryApp::default();
+        assert!(!app.recenter_chart);
+        app.recenter_chart();
+        assert!(app.recenter_chart);
+    }
+
+    #[test]
+    fn telemetry_app_zoom_chart() {
+        let mut app = TelemetryApp::default();
+        assert!(app.pending_zoom_factor.is_none());
+        app.zoom_chart(1.5);
+        assert_eq!(app.pending_zoom_factor, Some(1.5));
+    }
+
+    #[test]
+    fn system_health_status_badges() {
+        let (title, _, text_col, _) = SystemHealthStatus::Nominal.badge_info();
+        assert!(title.contains("BEZ ANOMÁLIÍ"));
+        assert_eq!(text_col, egui::Color32::from_rgb(0, 220, 100));
+
+        let (title, _, text_col, _) = SystemHealthStatus::Warning.badge_info();
+        assert!(title.contains("VAROVÁNÍ"));
+        assert_eq!(text_col, egui::Color32::from_rgb(255, 205, 40));
+
+        let (title, _, text_col, _) = SystemHealthStatus::Critical.badge_info();
+        assert!(title.contains("KRITICKÉ"));
+        assert_eq!(text_col, egui::Color32::from_rgb(255, 75, 75));
     }
 }

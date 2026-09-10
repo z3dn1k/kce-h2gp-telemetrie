@@ -147,12 +147,8 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
             }
 
-            if ui.button("📄 REPORT").on_hover_text("Vygenerovat textový report do summary.txt").clicked() {
-                if let Err(e) = app.data_manager.export_summary() {
-                    eprintln!("Failed to generate report: {}", e);
-                } else {
-                    println!("Report saved to summary.txt");
-                }
+            if ui.button("📄 REPORT (P)").on_hover_text("Zobrazit pozávodní analytický report a možnosti exportu [P]").clicked() {
+                app.open_report_modal();
             }
 
             ui.add_space(15.0);
@@ -175,9 +171,14 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                 ui.add_space(10.0);
                 ui.label(egui::RichText::new(msg).color(egui::Color32::from_rgb(0, 255, 180)).strong().size(11.0));
             }
+
+            if let Some((msg, _)) = &app.report_toast {
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new(msg).color(egui::Color32::from_rgb(0, 210, 255)).strong().size(11.0));
+            }
             
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new("[1-4 Grafy | Space Pauza | R Recenter | C Spojení | D Demo]").color(egui::Color32::from_gray(80)).size(10.0));
+                ui.label(egui::RichText::new("[1-4 Grafy | Space Pauza | R Recenter | P Report | C Spojení | D Demo]").color(egui::Color32::from_gray(80)).size(10.0));
             });
         });
     });
@@ -628,4 +629,205 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             });
         }
     });
+
+    render_report_modal(app, ctx);
+}
+
+/// Renders an interactive modal window displaying comprehensive post-race analytics and export options.
+fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
+    if !app.show_report_modal {
+        return;
+    }
+
+    let mut is_open = app.show_report_modal;
+    let mut close_requested = false;
+    let mut export_action: Option<(&'static str, String)> = None;
+
+    egui::Window::new("📊 ZÁVĚREČNÁ ANALÝZA JÍZDY (POST-RACE REPORT)")
+        .open(&mut is_open)
+        .collapsible(false)
+        .resizable(true)
+        .default_width(740.0)
+        .default_height(580.0)
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .show(ctx, |ui| {
+            if let Some(report) = &app.active_report {
+                // Header info
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("🏎 H2GP RC Speciál").color(egui::Color32::from_rgb(0, 210, 255)).strong().size(13.0));
+                    ui.separator();
+                    ui.label(egui::RichText::new(format!("Pilot: {}", app.driver_code)).color(egui::Color32::WHITE).strong());
+                    ui.separator();
+                    let m = (report.duration_s as u32) / 60;
+                    let s = report.duration_s % 60.0;
+                    ui.label(egui::RichText::new(format!("Doba stintu: {:02}:{:04.1}", m, s)).color(egui::Color32::from_gray(200)));
+                    ui.separator();
+                    ui.label(egui::RichText::new(format!("{} vzorků ({:.1} PPS)", report.total_samples, report.avg_pps)).color(egui::Color32::from_gray(180)));
+                });
+
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                // 4 Metric Scorecards in 2 Columns
+                ui.columns(2, |cols| {
+                    // Column 1
+                    cols[0].group(|ui| {
+                        ui.set_width(ui.available_width());
+                        ui.label(egui::RichText::new("HYBRIDNÍ ENERGETICKÁ BILANCE").color(egui::Color32::from_rgb(0, 230, 118)).size(11.0).strong());
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(format!("{:.1} %", report.fc_energy_ratio_pct)).color(egui::Color32::from_rgb(0, 230, 118)).size(22.0).strong());
+                            ui.label(egui::RichText::new("podíl palivového článku").color(egui::Color32::from_gray(160)).size(11.0));
+                        });
+                        ui.label(egui::RichText::new(format!("• Energie FC: {:.1} J | Baterie: {:.1} J", report.fc_energy_j, report.batt_energy_j)).color(egui::Color32::from_gray(180)).size(11.0));
+                        ui.label(egui::RichText::new(format!("• Celková spotřeba: {:.1} J (prům. {:.1} W)", report.total_energy_j, report.avg_total_power_w)).color(egui::Color32::from_gray(180)).size(11.0));
+                    });
+
+                    cols[0].add_space(8.0);
+
+                    cols[0].group(|ui| {
+                        ui.set_width(ui.available_width());
+                        ui.label(egui::RichText::new("SKLIZEŇ REKUPERACE BRZDĚNÍM").color(egui::Color32::from_rgb(0, 210, 255)).size(11.0).strong());
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(format!("+{:.1} J", report.regen_energy_j)).color(egui::Color32::from_rgb(0, 210, 255)).size(22.0).strong());
+                            ui.label(egui::RichText::new(format!("(+{:.4} Ah)", report.regen_ah)).color(egui::Color32::from_gray(160)).size(11.0));
+                        });
+                        ui.label(egui::RichText::new(format!("• Špičkový brzdný proud: {:.2} A", report.peak_regen_current_a)).color(egui::Color32::from_gray(180)).size(11.0));
+                        ui.label(egui::RichText::new("• Úspora energie generátorem před zatáčkami").color(egui::Color32::from_gray(140)).size(10.0));
+                    });
+
+                    // Column 2
+                    cols[1].group(|ui| {
+                        ui.set_width(ui.available_width());
+                        ui.label(egui::RichText::new("PROUDOVÉ A VÝKONOVÉ EXTRÉMY").color(egui::Color32::from_rgb(255, 215, 0)).size(11.0).strong());
+                        ui.add_space(4.0);
+                        let p_max = report.peak_batt_power_w.max(report.peak_fc_power_w);
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(format!("{:.1} W", p_max)).color(egui::Color32::WHITE).size(22.0).strong());
+                            ui.label(egui::RichText::new("špičkový příkon (P_max)").color(egui::Color32::from_gray(160)).size(11.0));
+                        });
+                        ui.label(egui::RichText::new(format!("• Max. proud: Batt {:.2} A | FC {:.2} A", report.peak_batt_current_a, report.peak_fc_current_a)).color(egui::Color32::from_gray(180)).size(11.0));
+                        ui.label(egui::RichText::new(format!("• Min. napětí FC pod zátěží: {:.2} V", report.min_fc_voltage_v)).color(egui::Color32::from_gray(180)).size(11.0));
+                    });
+
+                    cols[1].add_space(8.0);
+
+                    cols[1].group(|ui| {
+                        ui.set_width(ui.available_width());
+                        ui.label(egui::RichText::new("TEPLOTNÍ A BEZPEČNOSTNÍ STAV").color(egui::Color32::from_rgb(255, 140, 0)).size(11.0).strong());
+                        ui.add_space(4.0);
+                        let max_t = report.max_batt_temp_c.max(report.max_fc_temp_c);
+                        let t_col = if max_t > 45.0 {
+                            egui::Color32::from_rgb(255, 23, 68)
+                        } else if max_t > 40.0 {
+                            egui::Color32::from_rgb(255, 234, 0)
+                        } else {
+                            egui::Color32::from_rgb(0, 230, 118)
+                        };
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(format!("{:.1} °C", max_t)).color(t_col).size(22.0).strong());
+                            ui.label(egui::RichText::new("max. teplota článků").color(egui::Color32::from_gray(160)).size(11.0));
+                        });
+                        ui.label(egui::RichText::new(format!("• Teploty: Batt Max {:.1} °C | FC Max {:.1} °C", report.max_batt_temp_c, report.max_fc_temp_c)).color(egui::Color32::from_gray(180)).size(11.0));
+                        let incident_txt = if report.critical_count > 0 {
+                            format!("🔴 {} kritických | 🟡 {} varování", report.critical_count, report.warning_count)
+                        } else if report.warning_count > 0 {
+                            format!("🟡 {} varování", report.warning_count)
+                        } else {
+                            "🟢 0 anomálií — čistá jízda".to_string()
+                        };
+                        ui.label(egui::RichText::new(format!("• Incidenty: {}", incident_txt)).color(egui::Color32::from_gray(180)).size(11.0));
+                    });
+                });
+
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(6.0);
+
+                // Incident List (Scrollable)
+                ui.label(egui::RichText::new(format!("PŘEHLED BEZPEČNOSTNÍCH INCIDENTŮ ({})", report.incidents.len())).color(egui::Color32::from_gray(140)).size(11.0).strong());
+                ui.add_space(4.0);
+
+                egui::ScrollArea::vertical().max_height(130.0).show(ui, |ui| {
+                    if report.incidents.is_empty() {
+                        ui.label(egui::RichText::new("✔ Během stintu nebyly detekovány žádné anomálie.").color(egui::Color32::from_rgb(0, 230, 118)).size(12.0));
+                    } else {
+                        for inc in &report.incidents {
+                            let time_s = f64::from(inc.timestamp_ms) / 1000.0;
+                            let m = (time_s as u32) / 60;
+                            let s = time_s % 60.0;
+                            let (color, tag) = match inc.severity {
+                                crate::anomaly::AnomalySeverity::Critical => (egui::Color32::from_rgb(255, 60, 60), "[CRIT]"),
+                                crate::anomaly::AnomalySeverity::Warning => (egui::Color32::from_rgb(255, 220, 0), "[WARN]"),
+                            };
+
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new(format!("[{:02}:{:04.1}]", m, s)).color(egui::Color32::from_gray(120)).monospace().size(11.0));
+                                ui.label(egui::RichText::new(tag).color(color).strong().size(11.0));
+                                ui.label(egui::RichText::new(&inc.description).color(color).size(11.0));
+                            });
+                        }
+                    }
+                });
+
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                // Action Buttons at the bottom
+                ui.horizontal(|ui| {
+                    if ui.button("🌐 ULOŽIT HTML").on_hover_text("Uložit grafický HTML dashboard do složky reports/").clicked() {
+                        let slug = crate::report::generate_timestamp_slug();
+                        let (html_path, _) = crate::report::report_file_paths(&slug);
+                        if let Err(e) = report.export_html(&app.driver_code, &html_path) {
+                            export_action = Some(("error", format!("Chyba exportu: {}", e)));
+                        } else {
+                            export_action = Some(("success", format!("Report uložen do {}", html_path.display())));
+                        }
+                    }
+
+                    if ui.button("📝 ULOŽIT MARKDOWN").on_hover_text("Uložit přehledný Markdown report do složky reports/").clicked() {
+                        let slug = crate::report::generate_timestamp_slug();
+                        let (_, md_path) = crate::report::report_file_paths(&slug);
+                        if let Err(e) = report.export_markdown(&app.driver_code, &md_path) {
+                            export_action = Some(("error", format!("Chyba exportu: {}", e)));
+                        } else {
+                            export_action = Some(("success", format!("Markdown uložen do {}", md_path.display())));
+                        }
+                    }
+
+                    if ui.button("📋 KOPÍROVAT").on_hover_text("Zkopírovat textový souhrn do schránky").clicked() {
+                        let clip = report.to_clipboard_text(&app.driver_code);
+                        ctx.copy_text(clip);
+                        export_action = Some(("success", "Souhrn zkopírován do schránky".to_string()));
+                    }
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("❌ ZAVŘÍT (Esc)").clicked() {
+                            close_requested = true;
+                        }
+                    });
+                });
+            } else {
+                ui.label("Žádná data pro report nejsou k dispozici.");
+            }
+        });
+
+    if close_requested {
+        is_open = false;
+    }
+
+    if let Some((kind, msg)) = export_action {
+        if kind == "success" {
+            println!("[report] {}", msg);
+            app.report_toast = Some((format!("✔ {}", msg), std::time::Instant::now() + std::time::Duration::from_secs(4)));
+        } else {
+            eprintln!("[report] {}", msg);
+            app.report_toast = Some((format!("❌ {}", msg), std::time::Instant::now() + std::time::Duration::from_secs(4)));
+        }
+    }
+
+    app.show_report_modal = is_open;
 }

@@ -7,6 +7,7 @@
 mod anomaly;
 mod config;
 mod protocol;
+mod report;
 mod serial;
 mod logger;
 mod datamanager;
@@ -176,6 +177,13 @@ pub struct TelemetryApp {
     pub recenter_chart: bool,
     /// Pending zoom factor to apply to the chart bounds (zoom in > 1.0, zoom out < 1.0).
     pub pending_zoom_factor: Option<f32>,
+
+    /// Flag indicating whether the interactive post-race analytics report modal dialog is open.
+    pub show_report_modal: bool,
+    /// Cached post-race session report displayed inside the modal dialog.
+    pub active_report: Option<report::SessionReport>,
+    /// Optional transient toast notification for report exports (message, display_until).
+    pub report_toast: Option<(String, Instant)>,
 }
 
 impl Default for TelemetryApp {
@@ -225,6 +233,9 @@ impl Default for TelemetryApp {
             health_status: SystemHealthStatus::Nominal,
             recenter_chart: false,
             pending_zoom_factor: None,
+            show_report_modal: false,
+            active_report: None,
+            report_toast: None,
         }
     }
 }
@@ -287,6 +298,34 @@ impl TelemetryApp {
         self.pending_zoom_factor = Some(factor);
     }
 
+    /// Computes a post-race analytics report from recorded telemetry and opens the in-app modal dialog.
+    pub fn open_report_modal(&mut self) {
+        let duration_s = match self.connection_state {
+            ConnectionState::Live { since } | ConnectionState::DemoMode { since } => since.elapsed().as_secs_f64(),
+            ConnectionState::Disconnected | ConnectionState::Error(_) => {
+                if let (Some(first), Some(last)) = (self.data_manager.history().first(), self.data_manager.history().last()) {
+                    if last.timestamp_ms > first.timestamp_ms {
+                        f64::from(last.timestamp_ms - first.timestamp_ms) / 1000.0
+                    } else {
+                        0.0
+                    }
+                } else {
+                    0.0
+                }
+            }
+        };
+
+        let anomalies_slice = self.recent_anomalies.make_contiguous();
+        let report = report::SessionReport::from_telemetry(
+            self.data_manager.history(),
+            anomalies_slice,
+            duration_s,
+            self.pps,
+        );
+        self.active_report = Some(report);
+        self.show_report_modal = true;
+    }
+
     /// Logs an anomaly event both to the persistent file and to the UI FIFO alert queue.
     fn record_anomaly(&mut self, anom: &anomaly::Anomaly) {
         logger::log_anomaly(
@@ -342,6 +381,14 @@ impl eframe::App for TelemetryApp {
                     } else {
                         self.start_demo();
                     }
+                } else if i.key_pressed(egui::Key::P) {
+                    if self.show_report_modal {
+                        self.show_report_modal = false;
+                    } else {
+                        self.open_report_modal();
+                    }
+                } else if i.key_pressed(egui::Key::Escape) && self.show_report_modal {
+                    self.show_report_modal = false;
                 }
             });
         }
@@ -435,6 +482,13 @@ impl eframe::App for TelemetryApp {
         if let Some((_, expire_time)) = &self.screenshot_toast {
             if Instant::now() > *expire_time {
                 self.screenshot_toast = None;
+            }
+        }
+
+        // Clear expired report toast notification
+        if let Some((_, expire_time)) = &self.report_toast {
+            if Instant::now() > *expire_time {
+                self.report_toast = None;
             }
         }
 
@@ -567,5 +621,19 @@ mod tests {
         let (title, _, text_col, _) = SystemHealthStatus::Critical.badge_info();
         assert!(title.contains("KRITICKÉ"));
         assert_eq!(text_col, egui::Color32::from_rgb(255, 75, 75));
+    }
+
+    #[test]
+    fn telemetry_app_open_report_modal() {
+        let mut app = TelemetryApp::default();
+        assert!(!app.show_report_modal);
+        assert!(app.active_report.is_none());
+
+        app.open_report_modal();
+
+        assert!(app.show_report_modal);
+        assert!(app.active_report.is_some());
+        let rep = app.active_report.as_ref().unwrap();
+        assert_eq!(rep.total_samples, 0);
     }
 }

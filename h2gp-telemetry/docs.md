@@ -351,7 +351,13 @@ Projekt obsahuje rozsáhlou sadu automatizovaných unit testů v souborech `prot
 - **`demo::tests` (2 testy)**:
   - Správnost parsování jednotlivého CSV řádku `parse_csv_line`.
   - Komplexní validace demo datasetu: minimálně 500 řádků, výskyt rekuperace a spolehlivá detekce všech 3 anomálií (`BattOvercurrent`, `FcVoltageSag`, `BattOvertemp`).
-- **`main::tests` (8 testů)**:
+- **`report::tests` (5 testů)**:
+  - Bezpečné zotavení z prázdného bufferu (`test_empty_telemetry_report`) bez rizika dělení nulou (`NaN`).
+  - Matematická správnost integrace rekuperační energie ($I < 0$) a výpočtu podílu palivového článku (`test_energy_split_and_regen_calculation`).
+  - Validita časového razítka souborů ve formátu `YYYYMMDD_HHMMSS` (`test_timestamp_slug_format`).
+  - Kompletní ověření HTML a Markdown exportérů a kopírování do schránky (`test_html_and_markdown_exports`).
+  - Výpočet a validace kompletního reportu z realistického závodního datasetu `data.csv` (`test_report_on_demo_data_csv`).
+- **`main::tests` (9 testů)**:
   - Funkčnost vícestavového automatu spojení `ConnectionState::is_connected`.
   - Formátování textu stavu a stopek doby spojení (`status_text`).
   - Přepínání stavu pozastavení grafu (`toggle_pause`).
@@ -360,8 +366,9 @@ Projekt obsahuje rozsáhlou sadu automatizovaných unit testů v souborech `prot
   - Nastavení požadavku na vycentrování grafu (`recenter_chart`).
   - Požadavek na změnu měřítka grafu (`zoom_chart`).
   - Barevnost a textové formátování vizitek celkového stavu systému `SystemHealthStatus::badge_info`.
+  - Otevření modálního analytického okna a výpočet reportu (`telemetry_app_open_report_modal`).
 
-**Výsledek verifikace**: Všech **53 testů** prochází úspěšně. Nástroj `cargo clippy` hlásí **0 varování** a generování HTML dokumentace `cargo doc --no-deps` probíhá s **0 chybami**.
+**Výsledek verifikace**: Všech **59 testů** prochází úspěšně. Nástroj `cargo clippy` hlásí **0 varování** a generování HTML dokumentace `cargo doc --no-deps` probíhá s **0 chybami**.
 
 ---
 
@@ -380,8 +387,11 @@ Namísto nutnosti manuálního zadávání systémových identifikátorů (např
 Během závodu v boxech je manipulace s myší často nepraktická. Aplikace plně podporuje ovládání pomocí klávesnice:
 - `1`, `2`, `3`, `4`: Okamžité přepínání zobrazeného telemetrického kanálu v grafu (`1: NAPĚTÍ`, `2: PROUD`, `3: VÝKON`, `4: ENERGIE`).
 - `Mezerník` (Space): Pozastavení nebo obnovení toku dat v grafu (`Pause / Resume`).
+- `R`: Vycentrování grafu (`Recenter`) a návrat k automatickému posunu živého toku.
+- `P`: Otevření nebo zavření interaktivního okna pozávodní analýzy a reportingu (`Post-Race Report`).
 - `C`: Připojení k vybranému sériovému portu nebo odpojení aktivní relace.
 - `D`: Spuštění offline demo simulace z `data.csv`.
+- `Esc`: Okamžité zavření otevřeného modálního okna reportu.
 
 **Ochrana kontextu vstupu**: Klávesové zkratky jsou vyhodnocovány s podmínkou `if !ctx.wants_keyboard_input()`. Pokud operátor právě edituje textové pole (např. zadává kód jezdce `driver_code` nebo název portu), stisk kláves se interpretuje jako běžný text a nespustí nechtěně povel k odpojení či přepnutí grafu.
 
@@ -547,5 +557,59 @@ V pravém diagnostickém panelu jsou aplikovány následující prvky:
    - Každý záznam v rolovacím seznamu si uchovává přesnou časovou značku (`[MM:SS.s]`), textovou identifikaci a závažnost `severity`.
    - Menší chyby jsou vykresleny jasně žlutým písmem s prefixem `[WARN]`.
    - Závažná rizika jsou vykreslena jasně červeným písmem s prefixem `[CRIT]`.
+
+---
+
+## 14. Pokročilý pozávodní reporting a analytický engine (Fáze 13)
+
+### 14.1 Motivace a strategický význam pro závody H2GP
+Ve vytrvalostních závodech vodíkových RC modelů (Horizon Hydrogen Grand Prix) je klíčem k vítězství efektivní nakládání s palivem a optimální rozdělení zátěže mezi palivový článek a LiPo akumulátor. Původní zjednodušený zápis do souboru `summary.txt` poskytoval pouze základní sumy bez hlubšího kontextu a bez zpětné vazby v grafickém rozhraní.
+
+Byl vytvořen dedikovaný modul `src/report.rs`, který implementuje pokročilý analytický engine `SessionReport` počítající strategické KPI v reálném čase a umožňující jejich okamžitou vizualizaci i export.
+
+### 14.2 Klíčové analytické metriky a jejich fyzikální výpočet
+1. **Hybridní energetická bilance (Podíl palivového článku $E_{fc} / E_{total}$)**:
+   - Palivový článek má táhnout trvalou zátěž vozu, zatímco akumulátor slouží pouze k pokrytí akceleračních špiček.
+   - Procentuální podíl palivového článku je počítán jako:
+     $$\eta_{fc} = \frac{E_{fc}}{E_{fc} + E_{batt}} \times 100\,\%$$
+   - Hodnoty nad $70\,\%$ indikují správnou závodní strategii; nižší hodnoty varují před předčasným vybitím akumulátoru před koncem 4hodinového závodu.
+2. **Sklizeň rekuperace brzděním (Regenerative Harvesting)**:
+   - Při brzdění před zatáčkami teče proud z elektromotoru do akumulátoru ($I_{batt} < -0.05\,\text{A}$).
+   - Systém integruje rekuperovanou energii i náboj v čase:
+     $$E_{regen} = \sum_{k} V_{batt,k} \cdot |I_{batt,k}| \cdot \Delta t_k \quad [\text{J}]$$
+     $$Q_{regen} = \sum_{k} \frac{|I_{batt,k}| \cdot \Delta t_k}{3600} \quad [\text{Ah}]$$
+   - Umožňuje telemetrikům objektivně zhodnotit, jak efektivně jezdec využívá rekuperační brzdění.
+3. **Index hladovění palivového článku (Starvation & Voltage Sag Index)**:
+   - Registrace nejnižšího napětí palivového článku pod zátěží ($V_{fc,\min}$, s odfiltrováním odpojeného článku $< 2.0\,\text{V}$).
+   - Pokles pod $9.0\,\text{V}$ indikuje nedostatečný přetlak vodíku na difuzní vrstvě článku.
+4. **Tepelné a výkonové extrémy**:
+   - Maximální a minimální teploty obou větví pohonu, maximální dosažený příkon ($P_{\max} = \max(P_{batt}, P_{fc})$) a špičkový proud.
+
+### 14.3 Interaktivní modální dialog v aplikaci (`egui::Window`)
+Stiskem klávesy **P** nebo kliknutím na tlačítko `📄 REPORT (P)` v horní nástrojové liště se přímo nad grafem otevře přehledné analytické okno:
+- **Hlavička stintu**: Kód pilota, celková doba jízdy, počet přijatých vzorků a průměrný packet rate (PPS).
+- **4 přehledové analytické karty**:
+  1. *Hybridní bilance* (procentuální podíl FC, energie v Joulech a průměrný celkový příkon).
+  2. *Sklizeň rekuperace* (celkové ušetřené Jouly, Ah a špičkový brzdný proud).
+  3. *Proudové a výkonové extrémy* (špičkový příkon, mezní proudy a minimální napětí článku pod zátěží).
+  4. *Teplotní a bezpečnostní stav* (teploty článků a stav incidentů).
+- **Rolovací seznam incidentů**: Chronologický výpis všech anomálií s přesným časem vzniku `[MM:SS.s]` a barevným odlišením (`[WARN]` žlutě, `[CRIT]` červeně).
+- **Akční tlačítka**:
+  - `🌐 ULOŽIT HTML`: Okamžitý export grafického HTML reportu.
+  - `📝 ULOŽIT MARKDOWN`: Export přehledného Markdown reportu.
+  - `📋 KOPÍROVAT`: Zkopírování formátovaného textového souhrnu do schránky operačního systému.
+  - `❌ ZAVŘÍT (Esc)`: Rychlé zavření okna.
+
+### 14.4 Formáty exportu a správa souborů
+1. **Samostatný HTML Dashboard (`reports/report_YYYYMMDD_HHMMSS.html`)**:
+   - Responzivní, moderní tmavý design (inspirovaný aplikací H2GP).
+   - Veškeré CSS styly jsou plně vestavěné (zero external dependencies) – soubor funguje 100% offline bez připojení k internetu.
+   - Obsahuje `@media print` pravidla pro čistý tisk na tiskárně nebo export do PDF jako příloha k maturitní práci.
+2. **GitHub-Flavored Markdown (`reports/report_YYYYMMDD_HHMMSS.md`)**:
+   - Tabulkový formát se standardními GitHub alerty (`> [!CAUTION]`, `> [!WARNING]`, `> [!NOTE]`).
+3. **Automatická časová razítka bez externích knihoven**:
+   - Algoritmus převodu unixového času na gregoriánské datum (dle Howarda Hinnanta) je implementován v čistém Rustu bez nutnosti přidávat těžkotonážní knihovnu `chrono`.
+   - Reporty jsou ukládány do dedikovaného adresáře `reports/`, který je evidován v `.gitignore`.
+
 
 

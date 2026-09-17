@@ -368,7 +368,7 @@ Projekt obsahuje rozsáhlou sadu automatizovaných unit testů v souborech `prot
   - Barevnost a textové formátování vizitek celkového stavu systému `SystemHealthStatus::badge_info`.
   - Otevření modálního analytického okna a výpočet reportu (`telemetry_app_open_report_modal`).
 
-**Výsledek verifikace**: Všech **59 testů** prochází úspěšně. Nástroj `cargo clippy` hlásí **0 varování** a generování HTML dokumentace `cargo doc --no-deps` probíhá s **0 chybami**.
+**Výsledek verifikace**: Všech **68 testů** prochází úspěšně (+ 1 ignorovaný). Nástroj `cargo clippy` hlásí **0 varování** a generování HTML dokumentace `cargo doc --no-deps` probíhá s **0 chybami**.
 
 ---
 
@@ -611,5 +611,36 @@ Stiskem klávesy **P** nebo kliknutím na tlačítko `📄 REPORT (P)` v horní 
    - Algoritmus převodu unixového času na gregoriánské datum (dle Howarda Hinnanta) je implementován v čistém Rustu bez nutnosti přidávat těžkotonážní knihovnu `chrono`.
    - Reporty jsou ukládány do dedikovaného adresáře `reports/`, který je evidován v `.gitignore`.
 
+---
 
+## 15. Fáze zpevnění a optimalizace (Hardening & Optimization)
+
+Komplexní revize projektu provedená po dokončení všech funkčních celků. Zaměřena na odstranění kritických chyb, posílení bezpečnosti, optimalizaci výkonu a rozšíření testovacího pokrytí.
+
+### 15.1 Opravené kritické chyby
+1. **Stínění detekce zkratu FC (anomaly.rs)**: Podmínka `else if sample.has_rev3_aux` byla změněna na nezávislý blok `if`, aby detekce zkratu FC palivového článku fungovala i při současném příjmu kanálových dat INA228.
+2. **Flush anomálního logu (logger.rs)**: Po každém zápisu anomálie je volán `writer.flush()`, čímž se zaručí okamžitá persistence na disk i v případě neočekávaného ukončení aplikace.
+3. **Omezení velikosti payloadu sériového rámce (serial.rs)**: Přidána konstanta `MAX_PAYLOAD_SIZE = 256` a kontrola, která zabraňuje alokaci paměti při příjmu poškozených hlaviček rámců.
+
+### 15.2 Bezpečnostní vylepšení
+- **HTML escapování v reportech (report.rs)**: Funkce `escape_html()` nahrazuje znaky `&`, `<`, `>`, `"` HTML entitami ve všech uživatelských řetězcích interpolovaných do exportovaného HTML.
+- **Typově bezpečné JSON příkazy (ui.rs)**: Příkazy pro MCU (řízení ventilátoru, identifikace pilota) jsou serializovány pomocí `serde_json::json!()` místo ručního `format!()`, čímž se eliminuje riziko malformovaného JSON.
+- **Detekce odpojení sériového zařízení (serial.rs)**: Fatální I/O chyby (`BrokenPipe`, `NotFound`, `PermissionDenied`, `ConnectionReset`) ukončí čtecí smyčku a umožní UI přejít do stavu odpojeno.
+- **Graceful join pracovního vlákna (main.rs)**: Metoda `stop_worker()` nyní volá `handle.join()` na pracovní vlákno, čímž zabraňuje konfliktu portů při rychlém odpojení a opětovném připojení.
+
+### 15.3 Validace konfigurace (config.rs)
+Metoda `validate()` je automaticky volána po každém načtení konfigurace z TOML souboru. Zajišťuje:
+- `buffer_capacity >= 100` (prevence selhání DataManageru)
+- `ui_refresh_interval_ms` v rozsahu 10–1000 ms (prevence 100% využití CPU)
+- `default_fan_duty` v rozsahu 0–100 %
+- Kritické prahy anomálií jsou striktně pod varovnými prahy
+
+### 15.4 Optimalizace výkonu
+- **O(1) klouzavý průměr (datamanager.rs)**: Struktura `RunningAvg` s kruhovým bufferem `VecDeque` nahrazuje iterativní výpočet SMA na každém snímku.
+- **Deduplikace logiky zoomu (ui.rs)**: Extrahována funkce `is_chart_zoomed()` nahrazující dva identické 7řádkové bloky.
+- **Efektivní vykreslování metrik (ui.rs)**: Funkce `render_metric` přijímá `&str` místo `String`, čímž eliminuje zbytečné heap alokace na každém snímku.
+- **Release profil (Cargo.toml)**: Přidán `[profile.release]` s LTO, single codegen unit a strip symbolů.
+
+### 15.5 Delta výpočet energie (report.rs)
+Celková energie za jízdu se nyní počítá jako `ΔE = E_last - E_first` namísto absolutní hodnoty posledního vzorku. Tím se eliminuje chyba při restartu MCU nebo zahájení telemetrie uprostřed závodu.
 

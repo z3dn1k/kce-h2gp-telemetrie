@@ -6,7 +6,7 @@
 # Serial connection baud rate (car MCU standard: 115200)
 serial_baud_rate = 115200
 
-# Default serial port path or name ("COM3" on Windows, "/dev/ttyUSB0" on Linux)
+# Default serial port (Windows: COM3, Linux: /dev/ttyUSB0 or /dev/ttyACM0)
 default_port = "COM3"
 
 # Maximum number of samples stored in the in-memory circular buffer

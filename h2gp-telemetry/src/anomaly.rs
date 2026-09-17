@@ -146,12 +146,15 @@ pub fn detect_anomalies(sample: &TelemetrySample, config: &AppConfig) -> Vec<Ano
                 cause: "Elevated heat",
             });
         }
-    } else if sample.has_rev3_aux && (sample.rev3_aux.flags & 0x01) != 0 {
+    }
+    
+    // 4. FC Short Circuit: Independent check (not else-if) so it fires even when channel data is also present
+    if sample.has_rev3_aux && (sample.rev3_aux.flags & 0x01) != 0 {
         anomalies.push(Anomaly {
             timestamp_ms: sample.timestamp_ms,
             kind: AnomalyKind::FcShort,
             severity: AnomalySeverity::Critical,
-            value_str: "ZKRACOVANI".to_string(),
+            value_str: "SHORT CIRCUIT".to_string(),
             cause: "Commanded FC short",
         });
     }
@@ -276,7 +279,29 @@ mod tests {
         assert_eq!(anoms.len(), 1);
         assert_eq!(anoms[0].kind, AnomalyKind::FcShort);
         assert_eq!(anoms[0].severity, AnomalySeverity::Critical);
-        assert_eq!(anoms[0].value_str, "ZKRACOVANI");
+        assert_eq!(anoms[0].value_str, "SHORT CIRCUIT");
+    }
+
+    #[test]
+    fn test_both_channel_and_aux_short_detected() {
+        let config = AppConfig::default();
+        let sample = TelemetrySample {
+            timestamp_ms: 1000,
+            batt: ChannelData { v: 12.0, sv_mv: 0.0, i: 20.0, p: 240.0, e: 0.0, ah: 0.0, t: 25.0 },
+            fc: ChannelData { v: 12.0, sv_mv: 0.0, i: 1.0, p: 12.0, e: 0.0, ah: 0.0, t: 25.0 },
+            rev3_aux: Rev3AuxData {
+                flags: 0x01, // FC short flag set
+                ..Default::default()
+            },
+            has_channel_data: true,
+            has_rev3_aux: true,
+        };
+        let anomalies = detect_anomalies(&sample, &config);
+        // Should detect BOTH the overcurrent (20A > 15A) AND the FC short
+        let has_overcurrent = anomalies.iter().any(|a| a.kind == AnomalyKind::BattOvercurrent);
+        let has_fc_short = anomalies.iter().any(|a| a.kind == AnomalyKind::FcShort);
+        assert!(has_overcurrent, "Overcurrent should be detected when has_channel_data is true");
+        assert!(has_fc_short, "FC short must be detected even when has_channel_data is also true");
     }
 }
 

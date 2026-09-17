@@ -87,6 +87,25 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    /// Clamps all configuration values to safe operating ranges.
+    /// Called automatically after loading from file.
+    pub fn validate(&mut self) {
+        self.buffer_capacity = self.buffer_capacity.max(100);
+        self.sma_window = self.sma_window.clamp(2, 100);
+        self.ui_refresh_interval_ms = self.ui_refresh_interval_ms.clamp(10, 1000);
+        self.anomaly_queue_capacity = self.anomaly_queue_capacity.max(1);
+        self.default_fan_duty = self.default_fan_duty.clamp(0, 100);
+        self.demo_interval_ms = self.demo_interval_ms.clamp(10, 5000);
+        self.default_chart_window_s = self.default_chart_window_s.clamp(5.0, 600.0);
+        // Ensure warning thresholds are strictly above critical thresholds
+        if self.anomaly_fc_vsag_v >= self.anomaly_fc_warn_vsag_v {
+            self.anomaly_fc_vsag_v = self.anomaly_fc_warn_vsag_v - 1.0;
+        }
+        if self.anomaly_batt_overtemp_c <= self.anomaly_batt_warn_temp_c {
+            self.anomaly_batt_overtemp_c = self.anomaly_batt_warn_temp_c + 5.0;
+        }
+    }
+
     /// Loads configuration from a TOML file, or creates it with defaults if missing.
     ///
     /// If the file at `path` cannot be parsed due to a syntax or format error,
@@ -94,8 +113,9 @@ impl AppConfig {
     pub fn load_or_default(path: &str) -> Self {
         match fs::read_to_string(path) {
             Ok(content) => match toml::from_str::<AppConfig>(&content) {
-                Ok(cfg) => {
+                Ok(mut cfg) => {
                     println!("[config] Loaded configuration from '{}'", path);
+                    cfg.validate();
                     cfg
                 }
                 Err(err) => {
@@ -103,11 +123,13 @@ impl AppConfig {
                         "[config] Failed to parse '{}' ({}), falling back to defaults",
                         path, err
                     );
-                    Self::default()
+                    let mut cfg = Self::default();
+                    cfg.validate();
+                    cfg
                 }
             },
-            Err(_) => {
-                let default_cfg = Self::default();
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                let mut default_cfg = Self::default();
                 if let Ok(serialized) = toml::to_string_pretty(&default_cfg) {
                     if let Err(err) = fs::write(path, serialized) {
                         eprintln!("[config] Could not write default config to '{}': {}", path, err);
@@ -115,7 +137,14 @@ impl AppConfig {
                         println!("[config] Created default configuration file at '{}'", path);
                     }
                 }
+                default_cfg.validate();
                 default_cfg
+            }
+            Err(e) => {
+                eprintln!("[config] Cannot read '{}': {} — using defaults", path, e);
+                let mut cfg = Self::default();
+                cfg.validate();
+                cfg
             }
         }
     }
@@ -163,8 +192,17 @@ mod tests {
         assert!(parsed.is_err());
     }
 
+    /// RAII guard that removes a file on drop, even if the test panics.
+    struct CleanupGuard<'a>(&'a str);
+    impl Drop for CleanupGuard<'_> {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(self.0);
+        }
+    }
+
     #[test]
     fn save_and_load_roundtrip() {
+        let _guard = CleanupGuard("test_config_roundtrip.toml");
         let test_path = "test_config_roundtrip.toml";
         let mut cfg = AppConfig::default();
         cfg.serial_baud_rate = 230_400;
@@ -174,8 +212,25 @@ mod tests {
         let loaded = AppConfig::load_or_default(test_path);
         assert_eq!(loaded.serial_baud_rate, 230_400);
         assert_eq!(loaded.default_port, "/dev/ttyUSB1");
+    }
 
-        let _ = fs::remove_file(test_path);
+    #[test]
+    fn test_validate_clamps_zero_buffer() {
+        let mut cfg = AppConfig { buffer_capacity: 0, ..Default::default() };
+        cfg.validate();
+        assert_eq!(cfg.buffer_capacity, 100);
+    }
+
+    #[test]
+    fn test_validate_fixes_inverted_thresholds() {
+        let mut cfg = AppConfig {
+            anomaly_fc_warn_vsag_v: 10.0,
+            anomaly_fc_vsag_v: 12.0, // inverted: critical > warning
+            ..Default::default()
+        };
+        cfg.validate();
+        assert!(cfg.anomaly_fc_vsag_v < cfg.anomaly_fc_warn_vsag_v,
+            "Critical voltage sag must be below warning level");
     }
 }
 

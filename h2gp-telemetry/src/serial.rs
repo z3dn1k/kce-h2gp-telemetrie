@@ -17,6 +17,10 @@ const USB_FRAME_MAGIC: [u8; 4] = [0x48, 0x32, 0x47, 0x50]; // "H2GP" in ASCII
 const USB_HEADER_SIZE: usize = 10;
 const USB_KIND_MAIN_TELEMETRY: u8 = 1;
 
+/// Maximum acceptable telemetry payload size in bytes.
+/// Frames claiming a larger payload are treated as false sync matches and discarded.
+const MAX_PAYLOAD_SIZE: usize = 256;
+
 /// Scans the operating system for currently connected serial communication ports.
 ///
 /// Returns a list of system port names (e.g. `["/dev/ttyUSB0", "/dev/ttyACM0"]` on Linux,
@@ -41,13 +45,13 @@ pub fn start_serial_thread(
     tx: Sender<TelemetrySample>,
     cmd_rx: Receiver<String>,
     is_running: Arc<AtomicBool>,
-) {
+) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         if let Err(e) = run_serial_loop(&port_name, baud_rate, &tx, &cmd_rx, &is_running) {
             eprintln!("[serial] {}", e);
         }
         println!("[serial] Thread terminated cleanly.");
-    });
+    })
 }
 
 /// Inner serial loop extracted as a function returning Result.
@@ -117,6 +121,11 @@ fn run_serial_loop(
                     let payload_len = u16::from_le_bytes([buffer[6], buffer[7]]) as usize;
                     let frame_length = USB_HEADER_SIZE + payload_len;
 
+                    if payload_len > MAX_PAYLOAD_SIZE {
+                        buffer.drain(0..4); // discard false magic match and resync
+                        continue;
+                    }
+
                     if buffer.len() < frame_length {
                         break; 
                     }
@@ -159,6 +168,17 @@ fn run_serial_loop(
             Ok(_) => {}
             Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {}
             Err(e) => {
+                let fatal = matches!(
+                    e.kind(),
+                    std::io::ErrorKind::BrokenPipe
+                    | std::io::ErrorKind::NotFound
+                    | std::io::ErrorKind::PermissionDenied
+                    | std::io::ErrorKind::ConnectionReset
+                );
+                if fatal {
+                    eprintln!("[serial] Fatal error (device disconnected?): {}", e);
+                    break;
+                }
                 eprintln!("[serial] Read error: {}", e);
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -177,5 +197,15 @@ mod tests {
         let ports = detect_available_ports();
         // Just verify it returns a valid vector without crashing
         let _ = ports.len();
+    }
+
+    #[test]
+    fn test_max_payload_constant() {
+        assert_eq!(MAX_PAYLOAD_SIZE, 256);
+    }
+
+    #[test]
+    fn test_usb_frame_magic_bytes() {
+        assert_eq!(&USB_FRAME_MAGIC, b"H2GP");
     }
 }

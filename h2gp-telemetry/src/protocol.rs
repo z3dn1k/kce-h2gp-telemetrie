@@ -183,6 +183,8 @@ pub fn decode_rev3_aux(input: &[u8]) -> Rev3AuxData {
         temperature_c,
         max_temperature_c,
         fan_duty_percent,
+        // Not currently transmitted in the Rev3 aux packet.
+        // Reserved for future MCU firmware that includes the NTC sensor reading.
         fan_control_temperature_c: 0.0,
         flags,
         fan_mode,

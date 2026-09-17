@@ -19,14 +19,14 @@ use crate::error::TelemetryError;
 /// Reads all lines into memory and continuously transmits reconstituted `TelemetrySample`
 /// structs into `tx` at 100 ms intervals (10 Hz). Stops when `is_running` is set to false
 /// or the channel receiver is closed.
-pub fn start_demo_thread(filename: &str, tx: Sender<TelemetrySample>, is_running: Arc<AtomicBool>) {
+pub fn start_demo_thread(filename: &str, tx: Sender<TelemetrySample>, is_running: Arc<AtomicBool>, interval_ms: u64) -> std::thread::JoinHandle<()> {
     let filename = filename.to_string();
     thread::spawn(move || {
-        if let Err(e) = run_demo_loop(&filename, &tx, &is_running) {
+        if let Err(e) = run_demo_loop(&filename, &tx, &is_running, interval_ms) {
             eprintln!("[demo] {}", e);
         }
         println!("[demo] Thread terminated cleanly.");
-    });
+    })
 }
 
 /// Inner demo loop extracted as a function returning Result.
@@ -38,6 +38,7 @@ fn run_demo_loop(
     filename: &str,
     tx: &Sender<TelemetrySample>,
     is_running: &AtomicBool,
+    interval_ms: u64,
 ) -> Result<(), TelemetryError> {
     let file = File::open(filename).map_err(|e| TelemetryError::DemoFileOpen {
         path: filename.to_string(),
@@ -68,9 +69,9 @@ fn run_demo_loop(
                 tx.send(sample).map_err(|_| TelemetryError::ChannelDisconnected)?;
             }
 
-            // Advance simulated time by exactly 100ms (matching the 10 Hz playback)
-            simulated_time_ms += 100;
-            thread::sleep(Duration::from_millis(100)); 
+            // Advance simulated time by exactly interval_ms
+            simulated_time_ms += interval_ms as u32;
+            thread::sleep(Duration::from_millis(interval_ms)); 
         }
     }
 
@@ -82,7 +83,11 @@ fn run_demo_loop(
 /// Automatically assigns `timestamp_ms` from the synthetic monotonic clock
 /// and maps both battery and fuel cell physical channels.
 pub fn parse_csv_line(line: &str, timestamp_ms: u32) -> Option<TelemetrySample> {
-    let mut fields = line.split(',');
+    let parts: Vec<&str> = line.split(',').collect();
+    if parts.len() < 15 {
+        return None;
+    }
+    let mut fields = parts.into_iter();
 
     let mut next_f64 = || {
         fields.next().unwrap_or("0").trim().parse::<f64>().unwrap_or(0.0)
@@ -130,6 +135,13 @@ mod tests {
     use std::io::{BufRead, BufReader};
 
     #[test]
+    fn test_parse_csv_line_rejects_short_line() {
+        assert!(parse_csv_line("", 1000).is_none());
+        assert!(parse_csv_line("1.0,2.0,3.0", 1000).is_none());
+        assert!(parse_csv_line("only,five,tokens,here,test", 1000).is_none());
+    }
+
+    #[test]
     fn parse_csv_line_valid_row() {
         let line = "Demo,12.2429,36.1673,2.4112,29.5196,122.9520,0.1501,28.50,13.1653,31.5837,2.1056,27.7205,97.7721,0.1201,38.02";
         let sample = parse_csv_line(line, 500).expect("Should parse sample");
@@ -142,6 +154,7 @@ mod tests {
         assert_eq!(sample.fc.t, 38.02);
     }
 
+    #[ignore] // Requires local data.csv demo dataset
     #[test]
     fn demo_dataset_contains_anomalies_and_regen() {
         let file = File::open("data.csv").expect("data.csv must exist in project root");

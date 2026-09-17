@@ -35,17 +35,9 @@ pub enum TelemetryError {
         path: String,
     },
 
-    #[error("Log file '{path}' could not be opened: {source}")]
-    LogFileOpen {
-        path: String,
-        source: std::io::Error,
-    },
-
-    #[error("Failed to write to '{path}': {source}")]
-    LogWrite {
-        path: String,
-        source: std::io::Error,
-    },
+    // Note: Logger errors are intentionally not represented here.
+    // Logging uses a fire-and-forget pattern (eprintln! on failure)
+    // to ensure telemetry streaming is never interrupted by I/O glitches.
 
     #[error("Report export failed: {0}")]
     ReportExport(#[from] std::io::Error),

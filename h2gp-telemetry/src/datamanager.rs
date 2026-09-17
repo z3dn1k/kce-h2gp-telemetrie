@@ -6,8 +6,48 @@
 
 use std::fs::File;
 use std::io::Write;
+use std::collections::VecDeque;
 use crate::protocol::TelemetrySample;
 use crate::error::TelemetryError;
+
+/// O(1) running average calculator using a circular window buffer.
+#[derive(Debug, Clone)]
+struct RunningAvg {
+    sum: f64,
+    buffer: VecDeque<f64>,
+    window: usize,
+}
+
+impl RunningAvg {
+    fn new(window: usize) -> Self {
+        Self {
+            sum: 0.0,
+            buffer: VecDeque::with_capacity(window + 1),
+            window,
+        }
+    }
+
+    fn push(&mut self, value: f64) {
+        self.sum += value;
+        self.buffer.push_back(value);
+        if self.buffer.len() > self.window {
+            self.sum -= self.buffer.pop_front().unwrap_or(0.0);
+        }
+    }
+
+    fn avg(&self) -> f64 {
+        if self.buffer.is_empty() {
+            0.0
+        } else {
+            self.sum / self.buffer.len() as f64
+        }
+    }
+
+    fn clear(&mut self) {
+        self.sum = 0.0;
+        self.buffer.clear();
+    }
+}
 
 /// In-memory manager for historical telemetry samples.
 ///
@@ -26,6 +66,11 @@ pub struct DataManager {
     fc_v_mm: (f64, f64),
     fc_i_mm: (f64, f64),
     fc_p_mm: (f64, f64),
+
+    batt_voltage_avg: RunningAvg,
+    batt_current_avg: RunningAvg,
+    fc_voltage_avg: RunningAvg,
+    fc_current_avg: RunningAvg,
 }
 
 impl DataManager {
@@ -68,7 +113,7 @@ impl DataManager {
     ///
     /// The buffer uses a batch size of `clamp(max_history / 10, 10, 500)` to amortize
     /// reallocation costs during circular draining.
-    pub fn new(max_history: usize) -> Self {
+    pub fn new(max_history: usize, sma_window: usize) -> Self {
         let batch_size = (max_history / 10).clamp(10, 500); 
         
         let mut dm = Self {
@@ -82,6 +127,10 @@ impl DataManager {
             fc_v_mm: (f64::INFINITY, f64::NEG_INFINITY),
             fc_i_mm: (f64::INFINITY, f64::NEG_INFINITY),
             fc_p_mm: (f64::INFINITY, f64::NEG_INFINITY),
+            batt_voltage_avg: RunningAvg::new(sma_window),
+            batt_current_avg: RunningAvg::new(sma_window),
+            fc_voltage_avg: RunningAvg::new(sma_window),
+            fc_current_avg: RunningAvg::new(sma_window),
         };
         dm.reset_min_max();
         dm
@@ -92,6 +141,10 @@ impl DataManager {
         self.history.clear();
         self.time_labels.clear();
         self.reset_min_max();
+        self.batt_voltage_avg.clear();
+        self.batt_current_avg.clear();
+        self.fc_voltage_avg.clear();
+        self.fc_current_avg.clear();
     }
 
     fn reset_min_max(&mut self) {
@@ -132,6 +185,11 @@ impl DataManager {
         self.fc_i_mm.1 = self.fc_i_mm.1.max(sample.fc.i);
         self.fc_p_mm.0 = self.fc_p_mm.0.min(sample.fc.p);
         self.fc_p_mm.1 = self.fc_p_mm.1.max(sample.fc.p);
+
+        self.batt_voltage_avg.push(sample.batt.v);
+        self.batt_current_avg.push(sample.batt.i);
+        self.fc_voltage_avg.push(sample.fc.v);
+        self.fc_current_avg.push(sample.fc.i);
 
         self.history.push(sample);
         self.time_labels.push(elapsed_seconds);
@@ -191,43 +249,23 @@ impl DataManager {
     }
 
     /// Computes the Simple Moving Average (SMA) of battery voltage over the last `window` samples.
-    pub fn compute_batt_voltage_avg(&self, window: usize) -> f64 {
-        if self.history.is_empty() || window == 0 { return 0.0; }
-        let len = self.history.len();
-        let start = len.saturating_sub(window);
-        let slice = &self.history[start..];
-        let sum: f64 = slice.iter().map(|s| s.batt.v).sum();
-        sum / (slice.len() as f64)
+    pub fn compute_batt_voltage_avg(&self, _window: usize) -> f64 {
+        self.batt_voltage_avg.avg()
     }
 
     /// Computes the Simple Moving Average (SMA) of fuel cell voltage over the last `window` samples.
-    pub fn compute_fc_voltage_avg(&self, window: usize) -> f64 {
-        if self.history.is_empty() || window == 0 { return 0.0; }
-        let len = self.history.len();
-        let start = len.saturating_sub(window);
-        let slice = &self.history[start..];
-        let sum: f64 = slice.iter().map(|s| s.fc.v).sum();
-        sum / (slice.len() as f64)
+    pub fn compute_fc_voltage_avg(&self, _window: usize) -> f64 {
+        self.fc_voltage_avg.avg()
     }
 
     /// Computes the Simple Moving Average (SMA) of battery current over the last `window` samples.
-    pub fn compute_batt_current_avg(&self, window: usize) -> f64 {
-        if self.history.is_empty() || window == 0 { return 0.0; }
-        let len = self.history.len();
-        let start = len.saturating_sub(window);
-        let slice = &self.history[start..];
-        let sum: f64 = slice.iter().map(|s| s.batt.i).sum();
-        sum / (slice.len() as f64)
+    pub fn compute_batt_current_avg(&self, _window: usize) -> f64 {
+        self.batt_current_avg.avg()
     }
 
     /// Computes the Simple Moving Average (SMA) of fuel cell current over the last `window` samples.
-    pub fn compute_fc_current_avg(&self, window: usize) -> f64 {
-        if self.history.is_empty() || window == 0 { return 0.0; }
-        let len = self.history.len();
-        let start = len.saturating_sub(window);
-        let slice = &self.history[start..];
-        let sum: f64 = slice.iter().map(|s| s.fc.i).sum();
-        sum / (slice.len() as f64)
+    pub fn compute_fc_current_avg(&self, _window: usize) -> f64 {
+        self.fc_current_avg.avg()
     }
 
     /// Returns cached `(min, max)` battery voltage in Volts across active buffer history.
@@ -301,7 +339,7 @@ mod tests {
 
     #[test]
     fn new_datamanager_is_empty() {
-        let dm = DataManager::new(100);
+        let dm = DataManager::new(100, 5);
         assert!(dm.is_empty());
         assert_eq!(dm.history().len(), 0);
         assert_eq!(dm.time_labels().len(), 0);
@@ -311,7 +349,7 @@ mod tests {
 
     #[test]
     fn add_data_tracks_history_and_time() {
-        let mut dm = DataManager::new(100);
+        let mut dm = DataManager::new(100, 5);
         dm.add_data(make_test_sample(1000, 12.0, 1.0, 8.0, 2.0));
         dm.add_data(make_test_sample(2000, 12.5, 1.5, 8.5, 2.5));
 
@@ -322,7 +360,7 @@ mod tests {
 
     #[test]
     fn min_max_tracking() {
-        let mut dm = DataManager::new(100);
+        let mut dm = DataManager::new(100, 5);
         dm.add_data(make_test_sample(1000, 12.0, 2.0, 10.0, 1.0));
         dm.add_data(make_test_sample(2000, 10.0, 5.0, 8.0, 3.0));
         dm.add_data(make_test_sample(3000, 14.0, 1.0, 11.0, 0.5));
@@ -335,7 +373,7 @@ mod tests {
 
     #[test]
     fn backward_time_jump_clears_buffer() {
-        let mut dm = DataManager::new(100);
+        let mut dm = DataManager::new(100, 5);
         dm.add_data(make_test_sample(1000, 12.0, 1.0, 8.0, 2.0));
         dm.add_data(make_test_sample(2000, 12.2, 1.2, 8.2, 2.2));
         assert_eq!(dm.history().len(), 2);
@@ -351,29 +389,34 @@ mod tests {
 
     #[test]
     fn sma_calculations() {
-        let mut dm = DataManager::new(100);
+        let mut dm = DataManager::new(100, 5);
+        // Empty manager returns 0.0
         assert_eq!(dm.compute_batt_voltage_avg(10), 0.0);
-        assert_eq!(dm.compute_batt_voltage_avg(0), 0.0);
 
         dm.add_data(make_test_sample(1000, 10.0, 1.0, 6.0, 2.0));
         dm.add_data(make_test_sample(2000, 20.0, 3.0, 8.0, 4.0));
         dm.add_data(make_test_sample(3000, 30.0, 5.0, 10.0, 6.0));
 
-        // Full average (window >= len)
+        // Running average over fixed window=5, with 3 samples: avg of all three
         assert!((dm.compute_batt_voltage_avg(5) - 20.0).abs() < 1e-9);
         assert!((dm.compute_batt_current_avg(5) - 3.0).abs() < 1e-9);
         assert!((dm.compute_fc_voltage_avg(5) - 8.0).abs() < 1e-9);
         assert!((dm.compute_fc_current_avg(5) - 4.0).abs() < 1e-9);
 
-        // Window = 2: average of last two samples (20.0 and 30.0 -> 25.0)
-        assert!((dm.compute_batt_voltage_avg(2) - 25.0).abs() < 1e-9);
-        assert!((dm.compute_batt_current_avg(2) - 4.0).abs() < 1e-9);
+        // Add more samples to fill and exceed the window
+        dm.add_data(make_test_sample(4000, 40.0, 7.0, 12.0, 8.0));
+        dm.add_data(make_test_sample(5000, 50.0, 9.0, 14.0, 10.0));
+        dm.add_data(make_test_sample(6000, 60.0, 11.0, 16.0, 12.0));
+
+        // Window=5: should average last 5 samples (20,30,40,50,60) = 40.0
+        assert!((dm.compute_batt_voltage_avg(5) - 40.0).abs() < 1e-9);
+        assert!((dm.compute_batt_current_avg(5) - 7.0).abs() < 1e-9);
     }
 
     #[test]
     fn circular_buffer_drain_and_recompute() {
         let max_history = 20;
-        let mut dm = DataManager::new(max_history);
+        let mut dm = DataManager::new(max_history, 10);
 
         // Push enough items to trigger drain (max_history + batch_size)
         // For max_history = 20, batch_size is clamp(20/10, 10, 500) = 10.
@@ -392,10 +435,10 @@ mod tests {
 
     #[test]
     fn export_summary_empty_and_populated() {
-        let dm = DataManager::new(100);
+        let dm = DataManager::new(100, 5);
         assert!(dm.export_summary().is_ok());
 
-        let mut populated_dm = DataManager::new(100);
+        let mut populated_dm = DataManager::new(100, 5);
         populated_dm.add_data(make_test_sample(1000, 12.0, 2.0, 9.0, 1.5));
         assert!(populated_dm.export_summary().is_ok());
 

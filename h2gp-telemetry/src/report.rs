@@ -162,9 +162,10 @@ impl SessionReport {
         };
 
         // Energy totals from the last recorded sample
+        let first_sample = history.first();
         let last_sample = history.last();
-        let fc_energy_j = last_sample.map_or(0.0, |s| s.fc.e).max(0.0);
-        let batt_energy_j = last_sample.map_or(0.0, |s| s.batt.e).max(0.0);
+        let fc_energy_j = (last_sample.map_or(0.0, |s| s.fc.e) - first_sample.map_or(0.0, |s| s.fc.e)).max(0.0);
+        let batt_energy_j = (last_sample.map_or(0.0, |s| s.batt.e) - first_sample.map_or(0.0, |s| s.batt.e)).max(0.0);
         let total_energy_j = fc_energy_j + batt_energy_j;
         let fc_energy_ratio_pct = if total_energy_j > 0.001 {
             (fc_energy_j / total_energy_j) * 100.0
@@ -303,6 +304,14 @@ impl SessionReport {
         }
     }
 
+    /// Escapes special HTML characters to prevent DOM corruption in exported reports.
+    fn escape_html(s: &str) -> String {
+        s.replace('&', "&amp;")
+         .replace('<', "&lt;")
+         .replace('>', "&gt;")
+         .replace('"', "&quot;")
+    }
+
     /// Exports the report as a modern, self-contained HTML document to the specified path.
     pub fn export_html(&self, driver_code: &str, file_path: &Path) -> Result<(), TelemetryError> {
         if let Some(parent) = file_path.parent() {
@@ -333,7 +342,7 @@ impl SessionReport {
         writeln!(file, "<head>")?;
         writeln!(file, "  <meta charset=\"UTF-8\">")?;
         writeln!(file, "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")?;
-        writeln!(file, "  <title>H2GP Telemetrie — Závěrečný report [{}]</title>", driver_code)?;
+        writeln!(file, "  <title>H2GP Telemetrie — Závěrečný report [{}]</title>", Self::escape_html(driver_code))?;
         writeln!(file, "  <style>")?;
         writeln!(file, r#"
     :root {{
@@ -465,7 +474,7 @@ impl SessionReport {
         writeln!(file, "    <header>")?;
         writeln!(file, "      <div>")?;
         writeln!(file, "        <h1>🏎 H2GP POST-RACE ANALÝZA JÍZDY</h1>")?;
-        writeln!(file, "        <div class=\"subhead\">Vozidlo: H2GP RC Speciál | Pilot: <strong>{}</strong> | Datum: {} {}</div>", driver_code, date_str, time_str)?;
+        writeln!(file, "        <div class=\"subhead\">Vozidlo: H2GP RC Speciál | Pilot: <strong>{}</strong> | Datum: {} {}</div>", Self::escape_html(driver_code), date_str, time_str)?;
         writeln!(file, "      </div>")?;
         writeln!(file, "      <div>")?;
         writeln!(file, "        <span class=\"status-badge\" style=\"border-color: {}; color: {}; background: rgba(0,0,0,0.3);\">● {}</span>", status_color, status_color, status_label)?;
@@ -549,7 +558,7 @@ impl SessionReport {
                 writeln!(file, "          <tr>")?;
                 writeln!(file, "            <td style=\"font-family: monospace; font-size: 12px;\">{:02}:{:04.1}</td>", m, s)?;
                 writeln!(file, "            <td class=\"{}\">{}</td>", badge_class, tag)?;
-                writeln!(file, "            <td>{}</td>", inc.description)?;
+                writeln!(file, "            <td>{}</td>", Self::escape_html(&inc.description))?;
                 writeln!(file, "          </tr>")?;
             }
             writeln!(file, "        </tbody>")?;
@@ -782,8 +791,9 @@ mod tests {
         let report = SessionReport::from_telemetry(&samples, &[], 2.0, 10.0);
 
         assert_eq!(report.total_samples, 3);
-        assert!(report.fc_energy_j >= 99.0);
-        assert!(report.batt_energy_j >= 49.0);
+        // Delta energy: fc = 100.0 - 48.0 = 52.0, batt = 50.0 - 37.0 = 13.0
+        assert!(report.fc_energy_j >= 50.0, "FC delta energy should be ~52J, got {}", report.fc_energy_j);
+        assert!(report.batt_energy_j >= 12.0, "Batt delta energy should be ~13J, got {}", report.batt_energy_j);
         assert!(report.fc_energy_ratio_pct > 60.0);
         // Regen was detected
         assert!(report.regen_energy_j > 0.0, "Expected positive harvested regen energy");
@@ -860,5 +870,13 @@ mod tests {
                 assert!(report.fc_energy_ratio_pct > 0.0 && report.fc_energy_ratio_pct < 100.0);
             }
         }
+    }
+
+    #[test]
+    fn test_html_escape_special_chars() {
+        assert_eq!(SessionReport::escape_html("<script>alert('xss')</script>"), "&lt;script&gt;alert('xss')&lt;/script&gt;");
+        assert_eq!(SessionReport::escape_html("AT&T"), "AT&amp;T");
+        assert_eq!(SessionReport::escape_html(r#"say "hi""#), "say &quot;hi&quot;");
+        assert_eq!(SessionReport::escape_html("normal text"), "normal text");
     }
 }

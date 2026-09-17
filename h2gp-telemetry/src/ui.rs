@@ -8,6 +8,7 @@
 //! - **Bottom Panels**: Running averages, power-mix indicator, cooling fan controls, and raw packet diagnostics.
 
 use eframe::egui;
+use serde_json::json;
 use crate::TelemetryApp;
 use crate::serial;
 
@@ -57,7 +58,7 @@ impl std::fmt::Display for FanMode {
 }
 
 // Helper to render large, clean metric blocks
-fn render_metric(ui: &mut egui::Ui, title: &str, val_str: String, unit: &str, sub_text: String, sub_text_2: String, title_color: egui::Color32) {
+fn render_metric(ui: &mut egui::Ui, title: &str, val_str: &str, unit: &str, sub_text: &str, sub_text_2: &str, title_color: egui::Color32) {
     ui.vertical(|ui| {
         ui.add_space(2.0);
         ui.label(egui::RichText::new(title).color(title_color).size(10.0).strong());
@@ -88,6 +89,16 @@ fn render_mini_stat(ui: &mut egui::Ui, title: &str, val_str: String) {
         ui.label(egui::RichText::new(title).color(egui::Color32::from_gray(90)).size(9.0));
         ui.label(egui::RichText::new(val_str).color(egui::Color32::LIGHT_GRAY).size(14.0).strong());
     });
+}
+
+/// Checks whether the user has manually zoomed or panned the history chart.
+fn is_chart_zoomed(ctx: &egui::Context, recenter_flag: bool) -> bool {
+    if recenter_flag {
+        return false;
+    }
+    egui_plot::PlotMemory::load(ctx, egui::Id::new("history_plot"))
+        .map(|m| !m.auto_bounds.x)
+        .unwrap_or(false)
 }
 
 /// Primary dashboard layout and rendering function called every frame by `TelemetryApp::update`.
@@ -225,8 +236,15 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             if ui.button("SEND").clicked() {
                 if let Some(tx) = &app.cmd_tx {
                     let cmd = match app.fan_mode {
-                        FanMode::Manual => format!(r#"{{"cmd":"fan","mode":"manual","duty":{}}}"#, app.fan_duty),
-                        mode => format!(r#"{{"cmd":"fan","mode":"{}"}}"#, mode.as_str()),
+                        FanMode::Manual => json!({
+                            "cmd": "fan",
+                            "mode": "manual",
+                            "duty": app.fan_duty
+                        }).to_string(),
+                        mode => json!({
+                            "cmd": "fan",
+                            "mode": mode.as_str()
+                        }).to_string(),
                     };
                     let _ = tx.send(cmd);
                 }
@@ -237,7 +255,10 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             ui.add(egui::TextEdit::singleline(&mut app.driver_code).char_limit(3).desired_width(40.0));
             if ui.button("SEND").clicked() {
                 if let Some(tx) = &app.cmd_tx {
-                    let _ = tx.send(format!(r#"{{"cmd":"sign","driver":"{}"}}"#, app.driver_code.to_uppercase()));
+                    let _ = tx.send(json!({
+                        "cmd": "sign",
+                        "driver": app.driver_code.to_uppercase()
+                    }).to_string());
                 }
             }
 
@@ -363,15 +384,15 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                         let (p_min, p_max) = app.data_manager.batt_p_min_max();
 
                         egui::Grid::new("batt_grid_1").min_col_width(col_width / 3.0 - 10.0).show(ui, |ui| {
-                            render_metric(ui, "NAPETI", format!("{:.3}", sample.batt.v), "V", format!("MIN {:.3}  MAX {:.3}", v_min, v_max), format!("SV_MV {:.0}", sample.batt.sv_mv), batt_color);
-                            render_metric(ui, "PROUD", format!("{:.3}", sample.batt.i), "A", format!("MIN {:.3}  MAX {:.3}", i_min, i_max), "".to_string(), batt_color);
-                            render_metric(ui, "VYKON", format!("{:.3}", sample.batt.p), "W", format!("MIN {:.3}  MAX {:.3}", p_min, p_max), "".to_string(), batt_color);
+                            render_metric(ui, "NAPETI", &format!("{:.3}", sample.batt.v), "V", &format!("MIN {:.3}  MAX {:.3}", v_min, v_max), &format!("SV_MV {:.0}", sample.batt.sv_mv), batt_color);
+                            render_metric(ui, "PROUD", &format!("{:.3}", sample.batt.i), "A", &format!("MIN {:.3}  MAX {:.3}", i_min, i_max), "", batt_color);
+                            render_metric(ui, "VYKON", &format!("{:.3}", sample.batt.p), "W", &format!("MIN {:.3}  MAX {:.3}", p_min, p_max), "", batt_color);
                         });
                         ui.add_space(15.0);
                         egui::Grid::new("batt_grid_2").min_col_width(col_width / 3.0 - 10.0).show(ui, |ui| {
-                            render_metric(ui, "TEPLOTA", format!("{:.1}", sample.batt.t), "C", "INA228 INTERNAL".to_string(), "".to_string(), batt_color);
-                            render_metric(ui, "ENERGIE", format!("{:.2}", sample.batt.e), "J", "".to_string(), "".to_string(), batt_color);
-                            render_metric(ui, "KAPACITA", format!("{:.4}", sample.batt.ah), "Ah", "".to_string(), "".to_string(), batt_color);
+                            render_metric(ui, "TEPLOTA", &format!("{:.1}", sample.batt.t), "C", "INA228 INTERNAL", "", batt_color);
+                            render_metric(ui, "ENERGIE", &format!("{:.2}", sample.batt.e), "J", "", "", batt_color);
+                            render_metric(ui, "KAPACITA", &format!("{:.4}", sample.batt.ah), "Ah", "", "", batt_color);
                         });
                     }).response;
 
@@ -411,15 +432,15 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                         let (p_min, p_max) = app.data_manager.fc_p_min_max();
 
                         egui::Grid::new("fc_grid_1").min_col_width(col_width / 3.0 - 10.0).show(ui, |ui| {
-                            render_metric(ui, "NAPETI", format!("{:.3}", sample.fc.v), "V", format!("MIN {:.3}  MAX {:.3}", v_min, v_max), format!("SV_MV {:.0}", sample.fc.sv_mv), fc_color);
-                            render_metric(ui, "PROUD", format!("{:.3}", sample.fc.i), "A", format!("MIN {:.3}  MAX {:.3}", i_min, i_max), "".to_string(), fc_color);
-                            render_metric(ui, "VYKON", format!("{:.3}", sample.fc.p), "W", format!("MIN {:.3}  MAX {:.3}", p_min, p_max), "".to_string(), fc_color);
+                            render_metric(ui, "NAPETI", &format!("{:.3}", sample.fc.v), "V", &format!("MIN {:.3}  MAX {:.3}", v_min, v_max), &format!("SV_MV {:.0}", sample.fc.sv_mv), fc_color);
+                            render_metric(ui, "PROUD", &format!("{:.3}", sample.fc.i), "A", &format!("MIN {:.3}  MAX {:.3}", i_min, i_max), "", fc_color);
+                            render_metric(ui, "VYKON", &format!("{:.3}", sample.fc.p), "W", &format!("MIN {:.3}  MAX {:.3}", p_min, p_max), "", fc_color);
                         });
                         ui.add_space(15.0);
                         egui::Grid::new("fc_grid_2").min_col_width(col_width / 3.0 - 10.0).show(ui, |ui| {
-                            render_metric(ui, "TEPLOTA", format!("{:.1}", sample.fc.t), "C", "INA228 INTERNAL".to_string(), "".to_string(), fc_color);
-                            render_metric(ui, "ENERGIE", format!("{:.2}", sample.fc.e), "J", "".to_string(), "".to_string(), fc_color);
-                            render_metric(ui, "KAPACITA", format!("{:.4}", sample.fc.ah), "Ah", "".to_string(), "".to_string(), fc_color);
+                            render_metric(ui, "TEPLOTA", &format!("{:.1}", sample.fc.t), "C", "INA228 INTERNAL", "", fc_color);
+                            render_metric(ui, "ENERGIE", &format!("{:.2}", sample.fc.e), "J", "", "", fc_color);
+                            render_metric(ui, "KAPACITA", &format!("{:.4}", sample.fc.ah), "Ah", "", "", fc_color);
                         });
                     });
                 });
@@ -487,13 +508,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                 ui.separator();
                 ui.add_space(10.0);
 
-                let is_zoomed = if app.recenter_chart {
-                    false
-                } else {
-                    egui_plot::PlotMemory::load(ctx, egui::Id::new("history_plot"))
-                        .map(|m| !m.auto_bounds.x)
-                        .unwrap_or(false)
-                };
+                let is_zoomed = is_chart_zoomed(ctx, app.recenter_chart);
 
                 if is_zoomed {
                     ui.label(egui::RichText::new("🔍 ZOOM").color(egui::Color32::from_rgb(255, 200, 50)).size(11.0).strong());
@@ -534,13 +549,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             let history = app.data_manager.history();
             let times = app.data_manager.time_labels();
 
-            let is_zoomed = if app.recenter_chart {
-                false
-            } else {
-                egui_plot::PlotMemory::load(ctx, egui::Id::new("history_plot"))
-                    .map(|m| !m.auto_bounds.x)
-                    .unwrap_or(false)
-            };
+            let is_zoomed = is_chart_zoomed(ctx, app.recenter_chart);
 
             let start_idx = if is_zoomed {
                 0

@@ -137,6 +137,9 @@ pub struct TelemetryApp {
     /// Current connection status of the telemetry feed.
     pub connection_state: ConnectionState,
 
+    /// Handle to the currently running worker thread (serial or demo) for graceful join on disconnect.
+    pub worker_handle: Option<std::thread::JoinHandle<()>>,
+
     /// Selected fan operational mode (`Auto`, `Manual`, or `Off`).
     pub fan_mode: FanMode,
     /// Manual fan duty cycle percentage (0–100%).
@@ -191,6 +194,7 @@ impl Default for TelemetryApp {
         let config = AppConfig::load_or_default("config.toml");
         let (telemetry_tx, rx) = mpsc::channel();
         let buffer_cap = config.buffer_capacity;
+        let sma_window = config.sma_window;
         let default_port = config.default_port.clone();
         let fan_duty = config.default_fan_duty;
         let driver_code = config.default_driver_code.clone();
@@ -213,9 +217,10 @@ impl Default for TelemetryApp {
             shutdown_signal: None,
             latest_sample: None,
             latest_aux: None,
-            data_manager: datamanager::DataManager::new(buffer_cap),
+            data_manager: datamanager::DataManager::new(buffer_cap, sma_window),
             port_name,
             connection_state: ConnectionState::Disconnected,
+            worker_handle: None,
             fan_mode: FanMode::Auto,
             fan_duty,
             driver_code,
@@ -246,6 +251,9 @@ impl TelemetryApp {
         if let Some(signal) = self.shutdown_signal.take() {
             signal.store(false, Ordering::Relaxed);
         }
+        if let Some(handle) = self.worker_handle.take() {
+            let _ = handle.join();
+        }
     }
 
     /// Starts live serial telemetry acquisition using the currently selected `port_name`.
@@ -256,13 +264,13 @@ impl TelemetryApp {
         self.connection_state = ConnectionState::Live { since: Instant::now() };
         let (cmd_tx, cmd_rx) = mpsc::channel();
         self.cmd_tx = Some(cmd_tx);
-        serial::start_serial_thread(
+        self.worker_handle = Some(serial::start_serial_thread(
             self.port_name.clone(),
             self.config.serial_baud_rate,
             self.telemetry_tx.clone(),
             cmd_rx,
             running,
-        );
+        ));
     }
 
     /// Starts replaying recorded historical telemetry from `data.csv`.
@@ -271,7 +279,7 @@ impl TelemetryApp {
         let running = Arc::new(AtomicBool::new(true));
         self.shutdown_signal = Some(running.clone());
         self.connection_state = ConnectionState::DemoMode { since: Instant::now() };
-        demo::start_demo_thread("data.csv", self.telemetry_tx.clone(), running);
+        self.worker_handle = Some(demo::start_demo_thread("data.csv", self.telemetry_tx.clone(), running, self.config.demo_interval_ms));
     }
 
     /// Disconnects any active communication threads and resets PPS and health status.
@@ -332,6 +340,7 @@ impl TelemetryApp {
             anom.timestamp_ms,
             &format!("[{}] {}", anom.severity.tag_prefix(), anom.value_str),
             anom.cause,
+            "anomalies.log",
         );
         
         let log_str = anom.format_ui();

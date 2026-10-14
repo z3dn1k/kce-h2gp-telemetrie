@@ -1,16 +1,26 @@
 h2gp-telemetry/target/
-data.csv
+target/
+build/
+dist/
+
+# Runtime outputs
+*.log
+anomalies.log
+/data.csv
+/h2gp-telemetry/data.csv
+reports/
+**/reports/
+screenshot_*.png
+**/screenshot_*.png
+
+# Allow demo dataset in data/
+!**/data/data.csv
+
+# Temporary notes (deprecated)
 todo.txt
 docs.txt
 dulezity.txt
 future.txt
 simple-docs.md
-build/
-dist/
-*.log
 summary.txt
 **/summary.txt
-screenshot_*.png
-**/screenshot_*.png
-reports/
-**/reports/

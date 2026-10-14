@@ -1,8 +1,8 @@
-# 🏎️ H2GP Telemetry Dashboard
+# H2GP Telemetry Dashboard
 
 [![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
 [![GUI](https://img.shields.io/badge/GUI-egui%200.31-blue.svg)](https://github.com/emilk/egui)
-[![Tests](https://img.shields.io/badge/tests-45%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-68%20passed-brightgreen.svg)]()
 [![Clippy](https://img.shields.io/badge/clippy-zero%20warnings-brightgreen.svg)]()
 [![Unsafe](https://img.shields.io/badge/unsafe-forbidden-success.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-informational.svg)](LICENSE)
@@ -11,22 +11,22 @@ A high-performance, real-time telemetry acquisition, visualization, and diagnost
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [Overview](#-overview)
-- [Key Features](#-key-features)
-- [Architecture & Concurrency](#-architecture--concurrency)
-- [Binary Communication Protocol](#-binary-communication-protocol)
-- [Crates & Technical Justification](#-crates--technical-justification)
-- [Configuration (`config.toml`)](#-configuration-configtoml)
-- [Keyboard Shortcuts](#-keyboard-shortcuts)
-- [Getting Started](#-getting-started)
-- [Testing & Code Quality](#-testing--code-quality)
-- [License & Author](#-license--author)
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Architecture & Concurrency](#architecture--concurrency)
+- [Binary Communication Protocol](#binary-communication-protocol)
+- [Crates & Technical Justification](#crates--technical-justification)
+- [Configuration (`config.toml`)](#configuration-configtoml)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Getting Started](#getting-started)
+- [Testing & Code Quality](#testing--code-quality)
+- [License & Author](#license--author)
 
 ---
 
-## 🔭 Overview
+## Overview
 
 In the Horizon Hydrogen Grand Prix, vehicles are powered by a hybrid powertrain:
 1. **Hydrogen Fuel Cell (PEMFC)** — delivers continuous baseline power from pressurized hydrogen gas.
@@ -36,24 +36,24 @@ Optimizing fuel consumption, managing capacitor state-of-charge, and preventing 
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-- **🚀 Zero Compiler Warnings & `#![forbid(unsafe_code)]`**: Clean, idiomatic Rust with 100% memory safety.
-- **⚡ Dual-Channel Real-Time Oscilloscope**: Rolling history plots with customizable time windows (5s, 10s, 15s, 30s, 60s, 2m) across Bus Voltage, Current, Power, and Cumulative Energy.
-- **📊 Physical Comparison Dashboard**: Live comparison of the Battery/Capacitor bank vs. the Fuel Cell (Voltage, Current, Power, Die Temperature, Energy, Capacity, Shunt Voltage, and charging/discharging states).
-- **⚠️ Autonomous Anomaly Engine (`anomaly.rs`)**: Standalone rule engine detecting battery overcurrent, fuel cell voltage sag (starvation), cell overtemperature, and short-circuit flags.
-- **⏸️ Telemetry Freeze (Pause/Resume)**: Instantly pause the rolling chart with the `Space` key to inspect transient voltage sags and current spikes without missing background data logging.
-- **🔌 Serial Port Auto-Detection**: Scans the host OS for available serial ports with dynamic dropdown selection and a live rescan (`↻`) button.
-- **📶 Connection Quality Metric (PPS)**: Real-time packets-per-second monitoring with dynamic color thresholds (Green: $\ge 10\text{ PPS}$, Orange: $1\text{--}9\text{ PPS}$, Red: $0\text{ PPS}$).
-- **📷 Instant PNG Screenshot Export**: Captures the entire dashboard UI state to timestamped PNG files (`screenshot_<timestamp>.png`) with transient toast notifications.
-- **⏱️ Live Stint Uptime Tracker**: Dynamic `[MM:SS]` timers tracking the duration of active live and demo sessions.
-- **🎮 Bidirectional Uplink Control**: Transmit JSON commands to the car MCU for cooling fan mode (Auto, Manual, Off), PWM duty percentage (0–100%), and matrix display driver callsign.
-- **💾 Single-Point Non-Blocking Logging**: High-throughput buffered CSV streaming (`data.csv`) and anomaly logging (`anomalies.log`) decoupled from the rendering loop.
-- **🧪 Offline Demo Mode**: Replay recorded historical telemetry with synthetic monotonic clocks at a steady 10 Hz for testing without physical hardware.
+- **Zero Compiler Warnings & `#![forbid(unsafe_code)]`**: Clean, idiomatic Rust with 100% memory safety.
+- **Dual-Channel Real-Time Oscilloscope**: Rolling history plots with customizable time windows (5s, 10s, 15s, 30s, 60s, 2m) across Bus Voltage, Current, Power, and Cumulative Energy.
+- **Physical Comparison Dashboard**: Live comparison of the Battery/Capacitor bank vs. the Fuel Cell (Voltage, Current, Power, Die Temperature, Energy, Capacity, Shunt Voltage, and charging/discharging states).
+- **Autonomous Anomaly Engine (`anomaly.rs`)**: Standalone rule engine detecting battery overcurrent, fuel cell voltage sag (starvation), cell overtemperature, and short-circuit flags.
+- **Telemetry Freeze (Pause/Resume)**: Instantly pause the rolling chart with the `Space` key to inspect transient voltage sags and current spikes without missing background data logging.
+- **Serial Port Auto-Detection**: Scans the host OS for available serial ports with dynamic dropdown selection and a live rescan (`↻`) button.
+- **Connection Quality Metric (PPS)**: Real-time packets-per-second monitoring with dynamic color thresholds (Green: $\ge 10\text{ PPS}$, Orange: $1\text{--}9\text{ PPS}$, Red: $0\text{ PPS}$).
+- **Instant PNG Screenshot Export**: Captures the entire dashboard UI state to timestamped PNG files (`screenshot_<timestamp>.png`) with transient toast notifications.
+- **Live Stint Uptime Tracker**: Dynamic `[MM:SS]` timers tracking the duration of active live and demo sessions.
+- **Bidirectional Uplink Control**: Transmit JSON commands to the car MCU for cooling fan mode (Auto, Manual, Off), PWM duty percentage (0–100%), and matrix display driver callsign.
+- **Single-Point Non-Blocking Logging**: High-throughput buffered CSV streaming (`data.csv`) and anomaly logging (`anomalies.log`) decoupled from the rendering loop.
+- **Offline Demo Mode**: Replay recorded historical telemetry with synthetic monotonic clocks at a steady 10 Hz for testing without physical hardware.
 
 ---
 
-## 🏗️ Architecture & Concurrency
+## Architecture & Concurrency
 
 The application utilizes a multi-threaded architecture separated into decoupled I/O and rendering domains communicating via type-safe `std::sync::mpsc` channels:
 
@@ -94,7 +94,7 @@ The application utilizes a multi-threaded architecture separated into decoupled 
 
 ---
 
-## 📡 Binary Communication Protocol
+## Binary Communication Protocol
 
 To minimize serial bus latency and transmission overhead, raw text CSV streaming was replaced with a packed binary framing protocol.
 
@@ -129,7 +129,7 @@ Contains power board Rev3 auxiliary diagnostics:
 
 ---
 
-## 📦 Crates & Technical Justification
+## Crates & Technical Justification
 
 | Crate | Version | Justification & Purpose |
 |---|---|---|
@@ -143,7 +143,7 @@ Contains power board Rev3 auxiliary diagnostics:
 
 ---
 
-## ⚙️ Configuration (`config.toml`)
+## Configuration (`config.toml`)
 
 Parameters are loaded at startup from `config.toml`. If missing, a commented configuration file with safe defaults is automatically generated:
 
@@ -166,7 +166,7 @@ demo_interval_ms = 100
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## Keyboard Shortcuts
 
 | Shortcut | Action | Description |
 |:---:|---|---|
@@ -178,11 +178,11 @@ demo_interval_ms = 100
 | **`C`** | Connect / Disconnect | Toggles live serial connection on the selected port |
 | **`D`** | Demo Mode | Toggles offline replay simulation from `data.csv` |
 
-> ℹ️ **Smart Focus Isolation**: Shortcuts are gated by `!ctx.wants_keyboard_input()`. When editing text fields (such as entering driver code or custom port names), keystrokes are treated as regular text.
+> **Smart Focus Isolation**: Shortcuts are gated by `!ctx.wants_keyboard_input()`. When editing text fields (such as entering driver code or custom port names), keystrokes are treated as regular text.
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - [Rust Toolchain](https://rustup.rs/) (version 1.80 or newer recommended)
@@ -202,10 +202,10 @@ cargo run --release
 
 ---
 
-## 🧪 Testing & Code Quality
-
+## Testing & Code Quality
+ 
 ```bash
-# Run all 45 unit tests
+# Run all 68 unit tests
 cargo test
 
 # Run strict Clippy linter
@@ -216,15 +216,21 @@ cargo doc --no-deps --open
 ```
 
 ### Test Suite Summary:
-- **`protocol::tests` (22 tests)**: Sign extension (20-bit and 40-bit), INA228 LSB conversions, buffer underflow handling, and sentinel temperature mapping.
+- **`protocol::tests` (23 tests)**: Sign extension (20-bit and 40-bit), INA228 LSB conversions, buffer underflow handling, and sentinel temperature mapping.
 - **`datamanager::tests` (7 tests)**: Monotonicity reset guards, SMA rolling averages, min/max tracking, batch buffer draining, and summary exports.
-- **`config::tests` (4 tests)**: TOML serialization round-trips, default fallback handling, and disk persistence.
-- **`anomaly::tests` (6 tests)**: Voltage sag detection, overcurrent triggers, thermal safety limits, and condition flags.
-- **`serial::tests` (1 test)**: Port detection safety and panic-free hardware discovery.
-- **`main::tests` (5 tests)**: Connection state machine transitions, uptime formatting, pause toggles, PPS reset, and bounded alert queue rotation.
+- **`config::tests` (6 tests)**: TOML serialization round-trips, default fallback handling, range validation, and disk persistence.
+- **`anomaly::tests` (10 tests)**: Voltage sag detection, overcurrent triggers, thermal safety limits, condition flags, and concurrent channel/aux short detection.
+- **`serial::tests` (3 tests)**: Port detection safety, max payload bounds constant, and USB frame magic bytes verification.
+- **`demo::tests` (2 tests, 1 ignored)**: CSV line parsing and validation rejection.
+- **`logger::tests` (3 tests)**: CSV header creation, anomaly formatted output, and immediate flush persistence.
+- **`report::tests` (5 tests)**: HTML/Markdown generation, HTML escaping, energy delta/regen calculations, timestamp slug formatting, and offline CSV analysis.
+- **`main::tests` (9 tests)**: Connection state transitions, uptime formatting, pause toggles, PPS reset, zoom controls, recenter, health badges, bounded alert queue rotation, and report modal triggering.
 
 ---
 
-## 📄 License & Author
+## License & Author
 
 Developed by **Jan Zedník** (`z3dn1k`) for secondary school graduation thesis (*maturitní práce*) & **H2GP Racing Team**.
+
+Released under the **[MIT License](LICENSE)**.
+

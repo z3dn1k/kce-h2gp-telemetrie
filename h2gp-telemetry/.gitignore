@@ -1,0 +1,10 @@
+# Rust build artifacts
+target/
+
+# Runtime output logs & reports
+*.log
+anomalies.log
+reports/
+screenshot_*.png
+/data.csv
+

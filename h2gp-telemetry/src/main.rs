@@ -87,13 +87,13 @@ impl SystemHealthStatus {
                 egui::Color32::from_rgb(12, 38, 20),        // Dark green frame fill
             ),
             SystemHealthStatus::Warning => (
-                "⚠ VAROVÁNÍ (MINOR)",
+                "VAROVÁNÍ (MINOR)",
                 "Zvýšené zatížení / teplota",
                 egui::Color32::from_rgb(255, 205, 40),      // Bright amber/yellow
                 egui::Color32::from_rgb(45, 36, 8),         // Dark amber frame fill
             ),
             SystemHealthStatus::Critical => (
-                "🔴 KRITICKÉ RIZIKO",
+                "KRITICKÉ RIZIKO",
                 "Nadproud / Pokles / Zkrat",
                 egui::Color32::from_rgb(255, 75, 75),       // Bright red
                 egui::Color32::from_rgb(50, 14, 14),        // Dark red frame fill
@@ -279,7 +279,7 @@ impl TelemetryApp {
         let running = Arc::new(AtomicBool::new(true));
         self.shutdown_signal = Some(running.clone());
         self.connection_state = ConnectionState::DemoMode { since: Instant::now() };
-        self.worker_handle = Some(demo::start_demo_thread("data.csv", self.telemetry_tx.clone(), running, self.config.demo_interval_ms));
+        self.worker_handle = Some(demo::start_demo_thread("data/data.csv", self.telemetry_tx.clone(), running, self.config.demo_interval_ms));
     }
 
     /// Disconnects any active communication threads and resets PPS and health status.
@@ -421,14 +421,14 @@ impl eframe::App for TelemetryApp {
                         Ok(()) => {
                             println!("[screenshot] Successfully saved to {}", filename);
                             self.screenshot_toast = Some((
-                                format!("📷 Snímek uložen: {}", filename),
+                                format!("Snímek uložen: {}", filename),
                                 Instant::now() + std::time::Duration::from_secs(4),
                             ));
                         }
                         Err(e) => {
                             eprintln!("[screenshot] Failed to save {}: {}", filename, e);
                             self.screenshot_toast = Some((
-                                format!("❌ Chyba ukládání: {}", e),
+                                format!("Chyba ukládání: {}", e),
                                 Instant::now() + std::time::Duration::from_secs(4),
                             ));
                         }
@@ -580,6 +580,14 @@ mod tests {
 
     #[test]
     fn anomaly_queue_bounded_capacity() {
+        struct CleanupGuard(&'static str);
+        impl Drop for CleanupGuard {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(self.0);
+            }
+        }
+        let _guard = CleanupGuard("anomalies.log");
+
         let mut app = TelemetryApp::default();
         let cap = app.config.anomaly_queue_capacity;
 

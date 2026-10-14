@@ -473,7 +473,7 @@ impl SessionReport {
         // Header
         writeln!(file, "    <header>")?;
         writeln!(file, "      <div>")?;
-        writeln!(file, "        <h1>🏎 H2GP POST-RACE ANALÝZA JÍZDY</h1>")?;
+        writeln!(file, "        <h1>H2GP POST-RACE ANALÝZA JÍZDY</h1>")?;
         writeln!(file, "        <div class=\"subhead\">Vozidlo: H2GP RC Speciál | Pilot: <strong>{}</strong> | Datum: {} {}</div>", Self::escape_html(driver_code), date_str, time_str)?;
         writeln!(file, "      </div>")?;
         writeln!(file, "      <div>")?;
@@ -540,7 +540,7 @@ impl SessionReport {
         writeln!(file, "      <div class=\"card-title\" style=\"font-size: 13px;\">Záznam bezpečnostních anomálií a incidentů ({})</div>", self.incidents.len())?;
 
         if self.incidents.is_empty() {
-            writeln!(file, "      <p style=\"color: var(--accent); margin: 15px 0 5px 0; font-size: 13px;\">✔ Během jízdy nebyly zaznamenány žádné anomálie. Všechny subsystémy pracovaly v nominálním rozsahu.</p>")?;
+            writeln!(file, "      <p style=\"color: var(--accent); margin: 15px 0 5px 0; font-size: 13px;\">Během jízdy nebyly zaznamenány žádné anomálie. Všechny subsystémy pracovaly v nominálním rozsahu.</p>")?;
         } else {
             writeln!(file, "      <table>")?;
             writeln!(file, "        <thead><tr><th>Čas</th><th>Závažnost</th><th>Popis incidentu</th></tr></thead>")?;
@@ -586,7 +586,7 @@ impl SessionReport {
         let mut file = File::create(file_path)?;
         let (time_str, date_str) = format_current_datetime();
 
-        writeln!(file, "# 🏎 H2GP Post-Race Report — Pilot: {}", driver_code)?;
+        writeln!(file, "# H2GP Post-Race Report — Pilot: {}", driver_code)?;
         writeln!(file)?;
         writeln!(file, "**Datum a čas:** {} {} | **Délka jízdy:** {:02}:{:04.1} | **Vzorků:** {} (@ {:.1} PPS)",
             date_str, time_str, (self.duration_s as u32) / 60, self.duration_s % 60.0, self.total_samples, self.avg_pps)?;
@@ -832,7 +832,7 @@ mod tests {
         assert!(html_content.contains("FC V-DROP : 10.2 V"));
 
         let md_content = fs::read_to_string(&md_file).expect("Read md");
-        assert!(md_content.contains("# 🏎 H2GP Post-Race Report"));
+        assert!(md_content.contains("# H2GP Post-Race Report"));
         assert!(md_content.contains("TST"));
 
         let clip_text = report.to_clipboard_text("TST");
@@ -851,7 +851,7 @@ mod tests {
 
     #[test]
     fn test_report_on_demo_data_csv() {
-        if let Ok(file) = File::open("data.csv") {
+        if let Ok(file) = File::open("data/data.csv").or_else(|_| File::open("data.csv")) {
             use std::io::BufRead;
             let reader = std::io::BufReader::new(file);
             let mut samples = Vec::new();

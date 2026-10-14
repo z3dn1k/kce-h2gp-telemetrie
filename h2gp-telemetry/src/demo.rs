@@ -40,10 +40,12 @@ fn run_demo_loop(
     is_running: &AtomicBool,
     interval_ms: u64,
 ) -> Result<(), TelemetryError> {
-    let file = File::open(filename).map_err(|e| TelemetryError::DemoFileOpen {
-        path: filename.to_string(),
-        source: e,
-    })?;
+    let file = File::open(filename)
+        .or_else(|_| File::open(format!("data/{}", filename)))
+        .map_err(|e| TelemetryError::DemoFileOpen {
+            path: filename.to_string(),
+            source: e,
+        })?;
 
     // Read all rows from the CSV into memory once
     let reader = BufReader::new(file);
@@ -157,7 +159,9 @@ mod tests {
     #[ignore] // Requires local data.csv demo dataset
     #[test]
     fn demo_dataset_contains_anomalies_and_regen() {
-        let file = File::open("data.csv").expect("data.csv must exist in project root");
+        let file = File::open("data/data.csv")
+            .or_else(|_| File::open("data.csv"))
+            .expect("data/data.csv or data.csv must exist");
         let reader = BufReader::new(file);
         let config = AppConfig::default();
 

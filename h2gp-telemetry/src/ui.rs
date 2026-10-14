@@ -150,15 +150,15 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                 {
                     app.toggle_pause();
                 }
-            } else if ui.button("⏸ PAUSE (Space)").on_hover_text("Pozastavit aktualizaci grafu [Mezerník]").clicked() {
+            } else if ui.button("PAUSE (Space)").on_hover_text("Pozastavit aktualizaci grafu [Mezerník]").clicked() {
                 app.toggle_pause();
             }
 
-            if ui.button("📷 SCREENSHOT").on_hover_text("Uložit snímek obrazovky do PNG").clicked() {
+            if ui.button("SCREENSHOT").on_hover_text("Uložit snímek obrazovky do PNG").clicked() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
             }
 
-            if ui.button("📄 REPORT (P)").on_hover_text("Zobrazit pozávodní analytický report a možnosti exportu [P]").clicked() {
+            if ui.button("REPORT (P)").on_hover_text("Zobrazit pozávodní analytický report a možnosti exportu [P]").clicked() {
                 app.open_report_modal();
             }
 
@@ -263,7 +263,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.toggle_value(&mut app.show_diagnostics, "🛠 DIAGNOSTICS");
+                ui.toggle_value(&mut app.show_diagnostics, "DIAGNOSTICS");
             });
         });
     });
@@ -511,19 +511,19 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                 let is_zoomed = is_chart_zoomed(ctx, app.recenter_chart);
 
                 if is_zoomed {
-                    ui.label(egui::RichText::new("🔍 ZOOM").color(egui::Color32::from_rgb(255, 200, 50)).size(11.0).strong());
+                    ui.label(egui::RichText::new("ZOOM").color(egui::Color32::from_rgb(255, 200, 50)).size(11.0).strong());
                 } else {
                     ui.label(egui::RichText::new("● LIVE").color(egui::Color32::from_rgb(0, 220, 100)).size(11.0).strong());
                 }
 
-                if ui.button(egui::RichText::new("➕ ZOOM IN").size(11.0))
+                if ui.button(egui::RichText::new("ZOOM IN (+)").size(11.0))
                     .on_hover_text("Přiblížit graf k pozici kurzoru nebo středu (nebo použijte kolečko myši)")
                     .clicked()
                 {
                     app.zoom_chart(1.4);
                 }
 
-                if ui.button(egui::RichText::new("➖ ZOOM OUT").size(11.0))
+                if ui.button(egui::RichText::new("ZOOM OUT (-)").size(11.0))
                     .on_hover_text("Oddálit graf od pozice kurzoru nebo středu (nebo použijte kolečko myši)")
                     .clicked()
                 {
@@ -531,7 +531,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                 }
 
                 let recenter_btn = egui::Button::new(
-                    egui::RichText::new("⟲ RECENTER")
+                    egui::RichText::new("RECENTER")
                         .color(if is_zoomed { egui::Color32::from_rgb(80, 220, 255) } else { egui::Color32::WHITE })
                         .size(11.0)
                         .strong()
@@ -652,7 +652,7 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
     let mut close_requested = false;
     let mut export_action: Option<(&'static str, String)> = None;
 
-    egui::Window::new("📊 ZÁVĚREČNÁ ANALÝZA JÍZDY (POST-RACE REPORT)")
+    egui::Window::new("ZÁVĚREČNÁ ANALÝZA JÍZDY (POST-RACE REPORT)")
         .open(&mut is_open)
         .collapsible(false)
         .resizable(true)
@@ -663,7 +663,7 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
             if let Some(report) = &app.active_report {
                 // Header info
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("🏎 H2GP RC Speciál").color(egui::Color32::from_rgb(0, 210, 255)).strong().size(13.0));
+                    ui.label(egui::RichText::new("H2GP RC Speciál").color(egui::Color32::from_rgb(0, 210, 255)).strong().size(13.0));
                     ui.separator();
                     ui.label(egui::RichText::new(format!("Pilot: {}", app.driver_code)).color(egui::Color32::WHITE).strong());
                     ui.separator();
@@ -741,11 +741,11 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
                         });
                         ui.label(egui::RichText::new(format!("• Teploty: Batt Max {:.1} °C | FC Max {:.1} °C", report.max_batt_temp_c, report.max_fc_temp_c)).color(egui::Color32::from_gray(180)).size(11.0));
                         let incident_txt = if report.critical_count > 0 {
-                            format!("🔴 {} kritických | 🟡 {} varování", report.critical_count, report.warning_count)
+                            format!("{} kritických | {} varování", report.critical_count, report.warning_count)
                         } else if report.warning_count > 0 {
-                            format!("🟡 {} varování", report.warning_count)
+                            format!("{} varování", report.warning_count)
                         } else {
-                            "🟢 0 anomálií — čistá jízda".to_string()
+                            "0 anomálií — čistá jízda".to_string()
                         };
                         ui.label(egui::RichText::new(format!("• Incidenty: {}", incident_txt)).color(egui::Color32::from_gray(180)).size(11.0));
                     });
@@ -761,7 +761,7 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
 
                 egui::ScrollArea::vertical().max_height(130.0).show(ui, |ui| {
                     if report.incidents.is_empty() {
-                        ui.label(egui::RichText::new("✔ Během stintu nebyly detekovány žádné anomálie.").color(egui::Color32::from_rgb(0, 230, 118)).size(12.0));
+                        ui.label(egui::RichText::new("Během stintu nebyly detekovány žádné anomálie.").color(egui::Color32::from_rgb(0, 230, 118)).size(12.0));
                     } else {
                         for inc in &report.incidents {
                             let time_s = f64::from(inc.timestamp_ms) / 1000.0;
@@ -787,7 +787,7 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
 
                 // Action Buttons at the bottom
                 ui.horizontal(|ui| {
-                    if ui.button("🌐 ULOŽIT HTML").on_hover_text("Uložit grafický HTML dashboard do složky reports/").clicked() {
+                    if ui.button("ULOŽIT HTML").on_hover_text("Uložit grafický HTML dashboard do složky reports/").clicked() {
                         let slug = crate::report::generate_timestamp_slug();
                         let (html_path, _) = crate::report::report_file_paths(&slug);
                         if let Err(e) = report.export_html(&app.driver_code, &html_path) {
@@ -797,7 +797,7 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
                         }
                     }
 
-                    if ui.button("📝 ULOŽIT MARKDOWN").on_hover_text("Uložit přehledný Markdown report do složky reports/").clicked() {
+                    if ui.button("ULOŽIT MARKDOWN").on_hover_text("Uložit přehledný Markdown report do složky reports/").clicked() {
                         let slug = crate::report::generate_timestamp_slug();
                         let (_, md_path) = crate::report::report_file_paths(&slug);
                         if let Err(e) = report.export_markdown(&app.driver_code, &md_path) {
@@ -807,14 +807,14 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
                         }
                     }
 
-                    if ui.button("📋 KOPÍROVAT").on_hover_text("Zkopírovat textový souhrn do schránky").clicked() {
+                    if ui.button("KOPÍROVAT").on_hover_text("Zkopírovat textový souhrn do schránky").clicked() {
                         let clip = report.to_clipboard_text(&app.driver_code);
                         ctx.copy_text(clip);
                         export_action = Some(("success", "Souhrn zkopírován do schránky".to_string()));
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("❌ ZAVŘÍT (Esc)").clicked() {
+                        if ui.button("ZAVŘÍT (Esc)").clicked() {
                             close_requested = true;
                         }
                     });
@@ -831,10 +831,10 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
     if let Some((kind, msg)) = export_action {
         if kind == "success" {
             println!("[report] {}", msg);
-            app.report_toast = Some((format!("✔ {}", msg), std::time::Instant::now() + std::time::Duration::from_secs(4)));
+            app.report_toast = Some((msg, std::time::Instant::now() + std::time::Duration::from_secs(4)));
         } else {
             eprintln!("[report] {}", msg);
-            app.report_toast = Some((format!("❌ {}", msg), std::time::Instant::now() + std::time::Duration::from_secs(4)));
+            app.report_toast = Some((format!("Chyba: {}", msg), std::time::Instant::now() + std::time::Duration::from_secs(4)));
         }
     }
 

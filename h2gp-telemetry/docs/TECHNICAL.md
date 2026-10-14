@@ -413,7 +413,7 @@ Pro okamžitý přehled o spolehlivosti rádiového / USB spojení počítá apl
 
 ### 10.5 Export snímků obrazovky do PNG (Screenshot Export)
 Aplikace obsahuje integrovanou funkci pro pořizování grafických reportů:
-- Tlačítko `📷 SCREENSHOT` odešle frameworku příkaz `ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()))`.
+- Tlačítko `SCREENSHOT` odešle frameworku příkaz `ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()))`.
 - V následujícím rámci aplikace zachytí vygenerovanou událost `egui::Event::Screenshot`, která nese surový barevný buffer `Arc<egui::ColorImage>`.
 - Pixely jsou převedeny do barevného formátu RGBA a uloženy na disk pomocí knihovny `image::RgbaImage` jako `screenshot_<timestamp>.png`.
 - V horní liště se po úspěšném uložení zobrazí přívětivá zelená notifikace (toast) informující uživatele o přesném názvu vytvořeného souboru.
@@ -474,13 +474,13 @@ Pro účely prezentace, testování a demonstrace bez nutnosti zapojení reáln�
 Grafická komponenta `egui_plot` byla rozšířena o interaktivní navigaci:
 - **Zoom kolečkem myši**: Otáčením kolečka myši nad grafem dochází k plynulému zvětšení nebo zmenšení přímo okolo pozice kurzoru myši.
 - **Obdélníkový výběr (Box Zoom)**: Stiskem a tažením pravého tlačítka myši (Secondary Pointer Button) může operátor vymezit obdélníkový výřez a okamžitě přiblížit libovolnou sekci grafu.
-- **Tlačítka v nástrojové liště**: Tlačítka `➕ ZOOM IN` (zvětšení 1.4×) a `➖ ZOOM OUT` (zmenšení 0.71×) škálují pohled okolo pozice kurzoru, případně okolo středu grafu.
+- **Tlačítka v nástrojové liště**: Tlačítka `ZOOM IN (+)` (zvětšení 1.4×) a `ZOOM OUT (-)` (zmenšení 0.71×) škálují pohled okolo pozice kurzoru, případně okolo středu grafu.
 - **Inspekce souřadnic (`CoordinatesFormatter`)**: V levém dolním rohu grafu se v reálném čase zobrazuje přesná časová a hodnotová souřadnice bodu pod kurzorem: `t = 22.4 s | 16.85`.
 
 ### 12.3 Inteligentní správa vyrovnávací paměti při zvětšení
 Zásadním architektonickým problémem při živém vykreslování bývá mizení starých bodů:
 - V běžném režimu živého sledování (`● LIVE`) se do grafu posílá pouze plovoucí časové okno (`start_idx..times.len()`), aby automatické ohraničení (`auto_bounds: [true, true]`) drželo požadovanou šířku (např. 30 s).
-- Jakmile uživatel graf přiblíží nebo posune, `egui_plot` nastaví `auto_bounds.x = false` a v UI se rozsvítí zlatý indikátor `🔍 ZOOM`.
+- Jakmile uživatel graf přiblíží nebo posune, `egui_plot` nastaví `auto_bounds.x = false` a v UI se rozsvítí zlatý indikátor `ZOOM`.
 - V tomto stavu aplikace automaticky přepne na **plný historický buffer** (`start_idx = 0`). Díky tomu může telemetrický inženýr zkoumat libovolný úsek z celé zaznamenané historie (až 1200 vzorků), aniž by mu starší body mizely z obrazovky pod rukama.
 
 ### 12.4 Návrat k živému toku (`⟲ RECENTER`)
@@ -506,11 +506,11 @@ Původní binární detekce (anomálie nastala / nenastala) byla nahrazena tří
 2. **Warning (`SystemHealthStatus::Warning` / `AnomalySeverity::Warning`) — Žlutá (`#FFEA00`)**:
    - Provozní parametry se blíží mezním hodnotám nebo vykazují zvýšené namáhání.
    - Nevyžaduje okamžité odstavení vozidla, ale signalizuje nutnost úpravy jízdního stylu (např. ubrat plyn nebo zvýšit otáčky chladicích ventilátorů).
-   - V UI svítí badge: `⚠ VAROVÁNÍ (MINOR)` s doprovodným textem *"Zvýšená zátěž nebo teplota"*.
+   - V UI svítí badge: `VAROVÁNÍ (MINOR)` s doprovodným textem *"Zvýšená zátěž nebo teplota"*.
 3. **Critical (`SystemHealthStatus::Critical` / `AnomalySeverity::Critical`) — Červená (`#FF1744`)**:
    - Akutní riziko zkratu, nevratného poškození akumulátoru, hladovění článku (cell starvation) nebo požáru.
    - Vyžaduje okamžitou reakci týmu (např. nouzové odstavení, přepnutí do manuálního chlazení, kontrolu serva).
-   - V UI svítí badge: `🔴 KRITICKÉ RIZIKO` s doprovodným textem *"Riziko poškození, zkrat nebo přehřátí!"*.
+   - V UI svítí badge: `KRITICKÉ RIZIKO` s doprovodným textem *"Riziko poškození, zkrat nebo přehřátí!"*.
 
 ### 13.2 Konfigurovatelné prahové hodnoty (`config.toml` & `src/config.rs`)
 Všechny rozhodovací meze jsou plně parametrizovatelné v konfiguračním souboru `config.toml` a deserializovány do struktury `Config`:
@@ -550,8 +550,8 @@ V pravém diagnostickém panelu jsou aplikovány následující prvky:
    - Umístěn na vrcholu bočního panelu.
    - Rámeček i text dynamicky mění barvu pozadí i ohraničení:
      - Zelená: `● BEZ ANOMÁLIÍ`
-     - Žlutá: `⚠ VAROVÁNÍ (MINOR)`
-     - Červená: `🔴 KRITICKÉ RIZIKO`
+     - Žlutá: `VAROVÁNÍ (MINOR)`
+     - Červená: `KRITICKÉ RIZIKO`
    - Okamžitě reaguje na každý příchozí telemetrický vzorek. Pokud anomálie pomine, panel se ihned vrací do zeleného stavu.
 2. **Barevně kódovaná historie anomálií (`HISTORIE ANOMÁLIÍ`)**:
    - Každý záznam v rolovacím seznamu si uchovává přesnou časovou značku (`[MM:SS.s]`), textovou identifikaci a závažnost `severity`.
@@ -586,7 +586,7 @@ Byl vytvořen dedikovaný modul `src/report.rs`, který implementuje pokročilý
    - Maximální a minimální teploty obou větví pohonu, maximální dosažený příkon ($P_{\max} = \max(P_{batt}, P_{fc})$) a špičkový proud.
 
 ### 14.3 Interaktivní modální dialog v aplikaci (`egui::Window`)
-Stiskem klávesy **P** nebo kliknutím na tlačítko `📄 REPORT (P)` v horní nástrojové liště se přímo nad grafem otevře přehledné analytické okno:
+Stiskem klávesy **P** nebo kliknutím na tlačítko `REPORT (P)` v horní nástrojové liště se přímo nad grafem otevře přehledné analytické okno:
 - **Hlavička stintu**: Kód pilota, celková doba jízdy, počet přijatých vzorků a průměrný packet rate (PPS).
 - **4 přehledové analytické karty**:
   1. *Hybridní bilance* (procentuální podíl FC, energie v Joulech a průměrný celkový příkon).
@@ -595,10 +595,10 @@ Stiskem klávesy **P** nebo kliknutím na tlačítko `📄 REPORT (P)` v horní 
   4. *Teplotní a bezpečnostní stav* (teploty článků a stav incidentů).
 - **Rolovací seznam incidentů**: Chronologický výpis všech anomálií s přesným časem vzniku `[MM:SS.s]` a barevným odlišením (`[WARN]` žlutě, `[CRIT]` červeně).
 - **Akční tlačítka**:
-  - `🌐 ULOŽIT HTML`: Okamžitý export grafického HTML reportu.
-  - `📝 ULOŽIT MARKDOWN`: Export přehledného Markdown reportu.
-  - `📋 KOPÍROVAT`: Zkopírování formátovaného textového souhrnu do schránky operačního systému.
-  - `❌ ZAVŘÍT (Esc)`: Rychlé zavření okna.
+  - `ULOŽIT HTML`: Okamžitý export grafického HTML reportu.
+  - `ULOŽIT MARKDOWN`: Export přehledného Markdown reportu.
+  - `KOPÍROVAT`: Zkopírování formátovaného textového souhrnu do schránky operačního systému.
+  - `ZAVŘÍT (Esc)`: Rychlé zavření okna.
 
 ### 14.4 Formáty exportu a správa souborů
 1. **Samostatný HTML Dashboard (`reports/report_YYYYMMDD_HHMMSS.html`)**:
@@ -643,4 +643,345 @@ Metoda `validate()` je automaticky volána po každém načtení konfigurace z T
 
 ### 15.5 Delta výpočet energie (report.rs)
 Celková energie za jízdu se nyní počítá jako `ΔE = E_last - E_first` namísto absolutní hodnoty posledního vzorku. Tím se eliminuje chyba při restartu MCU nebo zahájení telemetrie uprostřed závodu.
+
+
+---
+
+## 16. Changelog — Historie vylepšení
+
+================================================================================
+  H2GP TELEMETRIE — BUDOUCÍ VYLEPŠENÍ (FUTURE IMPROVEMENTS)
+
+
+  Cíl: Projekt připravený na code review pro maturitní zkoušku
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. NULOVÉ WARNINGY PŘI KOMPILACI (ZERO COMPILER WARNINGS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 1a) Odstranit #![allow(dead_code)] z protocol.rs a datamanager.rs
+      → Místo potlačování varování skutečně odstranit nebo použít nepoužitý kód.
+      → Pokud něco zůstane nepoužité úmyslně (API pro budoucnost),
+        přidat #[allow(dead_code)] cíleně na konkrétní položku s komentářem proč.
+
+  [x] 1b) Přidat do hlavního main.rs na úrovni crate:
+        #![warn(clippy::all)]
+        #![warn(clippy::pedantic)]
+      → Spustit `cargo clippy` a opravit VŠECHNA hlášení.
+      → Ukazuje, že autor zná nástroje Rust ekosystému a pečuje o kvalitu kódu.
+
+  [x] 1c) Přidat do Cargo.toml sekci [lints]:
+        [lints.rust]
+        unsafe_code = "forbid"
+      → Explicitně deklaruje, že projekt nepoužívá unsafe kód — silný signál
+        bezpečnostního povědomí.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  2. TYPOVÁ BEZPEČNOST (TYPE SAFETY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 2a) fan_mode: String → enum FanMode { Auto, Manual, Off }
+      → String umožňuje překlep ("manuall"), enum to znemožňuje v době kompilace.
+      → Implementovat Display a FromStr pro serializaci do JSON příkazu.
+      → V code review vysvětlit: "eliminuje celou kategorii runtime chyb."
+
+  [x] 2b) chart_tab už je enum (ChartTab) — to je dobře. Ale přidat #[derive(Clone, Copy)]
+      aby se nemuselo pracovat s referencemi.
+
+  [-] 2c) driver_code: String → zvážit vlastní typ DriverCode(String)
+      s validací v konstruktoru (max 3 znaky, pouze A-Z).
+      → Demonstruje "newtype pattern" — typický Rust idiom. (Volitelné pro zítřek)
+
+  [-] 2d) Přidat typ Timestamp(u32) místo holého u32 pro timestamp_ms.
+      → Zabráníte záměně s jinými u32 hodnotami (packet_count apod.). (Volitelné pro zítřek)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  3. SPECIFICKÁ CHYBOVÁ HLÁŠENÍ (PROPER ERROR HANDLING)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 3a) Vytvořit vlastní chybový typ:
+
+        #[derive(Debug, thiserror::Error)]
+        pub enum TelemetryError {
+            #[error("Sériový port '{port}' nelze otevřít: {source}")]
+            SerialOpen { port: String, source: serialport::Error },
+
+            #[error("Binární rámec je příliš krátký: očekáváno {expected}, přijato {got}")]
+            FrameTooShort { expected: usize, got: usize },
+
+            #[error("Neplatná synchronizační sekvence v pozici {offset}")]
+            InvalidMagic { offset: usize },
+
+            #[error("Demo soubor '{path}' nelze načíst: {source}")]
+            DemoFileError { path: String, source: std::io::Error },
+
+            #[error("CSV export selhal: {0}")]
+            CsvWrite(#[from] std::io::Error),
+        }
+
+      → Přidat `thiserror` do Cargo.toml (crate je v ekosystému standardní).
+      → Nahradit všechna `eprintln!("Failed to...")` za návratový Result<_, TelemetryError>.
+      → V code review: "Každá chyba má kontext — název portu, očekávanou velikost.
+        Žádné generické 'something went wrong'."
+
+  [x] 3b) V serial.rs — místo tichého `let _ = tx.send(sample)` ošetřit případ
+      kdy je receiver odpojen (UI se zavřelo). Logovat a ukončit vlákno čistě.
+
+  [x] 3c) V logger.rs — .unwrap() na řádku 40 je zdokumentováno komentářem, ale
+      lepší by bylo přestrukturovat s `match` nebo `if let` pro konzistenci.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  4. UNIT TESTY (UNIT TESTS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 4a) protocol.rs — testovat decode_ina_channel():
+      → Test se známým 28-bajtovým bufferem → ověřit přesné výstupní hodnoty.
+      → Test s krátkým bufferem (< 28 bajtů) → nesmí panikovat, vrátí default.
+      → Test sign_extend_20() a sign_extend_40() s hraničními hodnotami.
+      → Test decode_rev3_aux() se známým vstupem.
+
+  [x] 4b) datamanager.rs — testovat:
+      → Kruhový buffer: přidat 1300 vzorků → ověřit, že délka <= 1200.
+      → Detekce zpětného časového skoku → ověřit automatický clear().
+      → SMA průměry s ručně vypočítanými hodnotami.
+      → Min/Max tracking — přidat specifické hodnoty, ověřit extrémy.
+      → export_summary() na prázdný DataManager → nesmí panikovat.
+
+  [x] 4c) Cíl: `cargo test` projde s 15+ testy, výstup ukazuje úspěšné na všech.
+      → Dosaženo 45 testů procházejících na 100%.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  5. DOKUMENTACE KÓDU (RUSTDOC DOCUMENTATION)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 5a) Přidat /// doc komentáře ke každé veřejné funkci a struktuře.
+  [x] 5b) Přidat //! modulové komentáře na začátek každého .rs souboru.
+  [x] 5c) Spustit `cargo doc --open` — vygeneruje se HTML dokumentace celého projektu bez chyb.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  6. KONFIGURACE MÍSTO HARDCODED KONSTANT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 6a) Vytvořit config.rs s centrální strukturou AppConfig.
+  [x] 6b) Načítat konfiguraci z config.toml souboru pomocí crate toml/serde s automatickým vytvořením výchozího souboru.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  7. ARCHITEKTONICKÉ VYLEPŠENÍ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 7a) Opravit duplicitní CSV zápis: provádět zápis pouze v serial.rs, chránit UI vlákno.
+  [x] 7b) Graceful shutdown: čisté ukončení vláken přes Arc<AtomicBool> a Drop na TelemetryApp.
+  [x] 7c) Oddělení anomaly engine do vlastního modulu anomaly.rs.
+  [x] 7d) Přidat výčet ConnectionState místo bool is_connected s živými stopkami.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  8. COOL FEATURES (WOW EFEKT)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 8a) Automatická detekce sériového portu
+      → Pomocí serialport::available_ports() zobrazit dropdown s dostupnými porty.
+      → Uživatel nemusí ručně psát "COM3" nebo "/dev/ttyUSB0".
+      → Malá změna, ale ukazuje znalost knihovny a UX myšlení.
+
+  [x] 8b) Klávesové zkratky
+      → 1/2/3/4 pro přepínání záložek grafů (V/A/W/J).
+      → D pro demo mode, C pro connect.
+      → Space pro pause/resume grafu.
+      → Ukazuje znalost event handlingu v egui.
+
+  [x] 8c) Indikátor kvality spojení
+      → Počítat pakety za sekundu (PPS).
+      → Zobrazit warning pokud PPS klesne pod threshold.
+      → Jednoduchá metrika, ale ukazuje systémové myšlení.
+
+  [x] 8d) Export do PNG
+      → Tlačítko "SCREENSHOT" které uloží aktuální stav grafu jako PNG.
+      → egui to podporuje přes ctx.send_viewport_cmd(ViewportCommand::Screenshot).
+
+  [x] 8e) Uptime / časový indikátor
+      → Zobrazit jak dlouho běží spojení (MM:SS od připojení).
+      → Jednoduchá implementace s Instant::now(), velký vizuální dojem.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  9. CARGO.TOML A PROJEKT METADATA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 9a) Vyplnit metadata v Cargo.toml:
+        [package]
+        name = "h2gp-telemetry"
+        version = "1.0.2"
+        edition = "2021"
+        authors = ["Jan Zedník <zednikjan91@gmail.com>"]
+        description = "Real-time telemetry dashboard for H2GP hydrogen fuel cell vehicles"
+        license = "MIT"
+        readme = "README.md"
+
+  [x] 9b) Přidat README.md s:
+      → Screenshot aplikace / popis rozhraní
+      → Popis architektury (diagram)
+      → Návod na spuštění (cargo run, demo mode)
+      → Popis komunikačního protokolu
+      → Seznam použitých crate s odůvodněním proč
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  10. PRIORITIZACE — CO UDĚLAT JAKO PRVNÍ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  MUST (bez těchto neprocházíte):
+    [x] Nulové warningy — cargo clippy čistý               (bod 1)
+    [x] Unit testy — cargo test zelený s 15+ testy          (bod 4)
+    [x] Opravit duplicitní CSV zápis                        (bod 7a)
+    [x] Vlastní chybový typ s thiserror                     (bod 3a)
+    [x] Základní doc komentáře                              (bod 5)
+
+  SHOULD (silně doporučeno):
+    [x] FanMode enum místo String                           (bod 2a)
+    [x] Centrální konfigurace / konstanty                   (bod 6)
+    [x] Graceful shutdown                                   (bod 7b)
+    [x] Auto-detekce portů                                  (bod 8a)
+    [x] README.md                                           (bod 9b)
+
+  NICE-TO-HAVE (wow efekt):
+    [x] Klávesové zkratky                                   (bod 8b)
+    [x] PPS indikátor                                       (bod 8c)
+    [x] ConnectionState enum                                (bod 7d)
+    [x] Anomaly engine v samostatném modulu                  (bod 7c)
+    [x] Konfigurace z TOML souboru                          (bod 6b)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  11. DOKONČENO — REALISTICKÉ DEMO S ANOMÁLIEMI & INTERAKTIVNÍ ZOOM/RECENTER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 11a) Realistický telemetrický dataset (data.csv)
+      → Místo jednoduché sinusoidy generován 80sekundový závodní okruh (800 vzorků při 10 Hz).
+      → Fyzikální model: P = V * I, úbytek napětí vlivem vnitřního odporu, Jouleovo zahřívání.
+      → Rekuperační brzdění (záporný proud baterie).
+      → Zahrnuty 3 reálné závodní anomálie:
+        - FC V-SAG (< 9.0 V) při akceleraci na rovince (nedostatek vodíku).
+        - BATT OVERCURRENT (> 15.0 A, špička 16.85 A) při zablokování serva řízení.
+        - BATT OVERTEMP (> 45.0 °C, vrchol 46.8 °C) při táhlé rychlé zatáčce.
+      → Automatizovaný unit test ověřující detekci anomálií a rekuperace v datech.
+
+  [x] 11b) Interaktivní Zoom grafu do zvoleného bodu
+      → Zoom kolečkem myši centrovaný na kurzor.
+      → Box Zoom (obdélníkový výběr tažením pravého tlačítka myši).
+      → Tlačítka ZOOM IN (+) (1.4x) a ZOOM OUT (-) (0.71x) na liště grafu.
+      → Zobrazení souřadnic bodu pod kurzorem (CoordinatesFormatter) v rohu grafu (čas a hodnota).
+      → Při přiblížení grafu se automaticky přepne na plný historický buffer, aby body nemizely.
+
+  [x] 11c) Funkce Recenter pro návrat k živému generovanému toku
+      → Tlačítko ⟲ RECENTER na liště grafu.
+      → Klávesová zkratka 'R'.
+      → Dvojklik myší na plochu grafu.
+      → Resetuje paměť grafu (Plot::reset()) a vrátí plovoucí časové okno (● LIVE).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  12. DOKONČENO — VÍCESTUPŇOVÁ DETEKCE ANOMÁLIÍ (NOMINAL / WARNING / CRITICAL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 12a) Třístupňový stavový model systému (SystemHealthStatus & AnomalySeverity)
+      → Zelená (Nominal): ● BEZ ANOMÁLIÍ — všechny veličiny v bezpečných normách.
+      → Žlutá (Warning): VAROVÁNÍ (MINOR) — zvýšená zátěž, ohřev nebo menší pokles napětí.
+      → Červená (Critical): KRITICKÉ RIZIKO — nadproud, zkrat, přehřátí nad 45 °C nebo hladovění článku (< 9 V).
+      → Při odpojení (Disconnect) čistý reset stavu na Nominal.
+
+  [x] 12b) Konfigurovatelné prahy v config.toml a Config
+      → anomaly_batt_warn_current_a: 12.0 A (Warning) vs anomaly_batt_crit_current_a: 15.0 A (Critical)
+      → anomaly_fc_warn_vsag_v: 10.5 V (Warning) vs anomaly_fc_crit_vsag_v: 9.0 V (Critical)
+      → anomaly_batt_warn_temp_c: 40.0 °C (Warning) vs anomaly_batt_crit_temp_c: 45.0 °C (Critical)
+
+  [x] 12c) Kaskádová filtrace zamezující duplicitním hlášením
+      → Kritická úroveň má přednost a zcela potlačuje žluté varování na stejném kanálu.
+      → Žádné duplicitní varovné hlášky při špičkách.
+
+  [x] 12d) Vizuální karty a barevně rozlišená historie v UI
+      → Dynamická karta "STAV SYSTÉMU" v záhlaví bočního panelu s barevným ohraničením a pozadím.
+      → Položky v historii anomálií barevně odlišeny: žluté [WARN] vs červené [CRIT].
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  13. DOKONČENO — POKROČILÝ POZÁVODNÍ REPORTING A ANALYTIKA (POST-RACE ENGINE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [x] 13a) Analytický engine SessionReport v modulu report.rs
+      → Hybridní energetická bilance: výpočet procentuálního podílu palivového článku (E_fc / E_total * 100%).
+      → Sklizeň rekuperace: integrace energie (J) i náboje (Ah) při brzdění (I_batt < -0.05 A).
+      → Analýza hladovění vodíku (minimální napětí FC pod zátěží).
+      → Tepelné profily a statistika incidentů (kritické vs. varování).
+
+  [x] 13b) Interaktivní modální dialog v aplikaci (klávesa P / tlačítko REPORT)
+      → 4 analytické KPI karty v modálním okně egui.
+      → Rolovací přehled bezpečnostních incidentů s časovými značkami.
+      → Rychlé klávesové zkratky (P otevře/zavře, Esc zavře).
+
+  [x] 13c) Samostatný moderní HTML dashboard a Markdown export
+      → Generování plnohodnotného HTML reportu s vestavěnými tmavými CSS styly a print pravidly.
+      → Markdown report pro dokumentaci a GitHub.
+      → Kopírování souhrnu do schránky (Clipboard) operačního systému.
+      → Ukládání s automatickým časovým razítkem do dedikované složky reports/.
+      → Bezzávislostní čistě rustovský výpočet kalendářního času bez externích crate.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  14. KOMPLEXNÍ REVIZE A ZPEVNĚNÍ (FULL REVIEW & HARDENING)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Celkové hodnocení projektu: 8/10.
+  Provedena kompletní analýza všech 11 modulů s identifikací 27 vylepšení.
+
+  [x] 14a) Opraveny 3 kritické bugy (P0)
+      → Stínění detekce zkratu FC v anomaly.rs (else if → if)
+      → Chybějící flush() anomálního logu v logger.rs
+      → Neomezená velikost payloadu sériového rámce v serial.rs
+
+  [x] 14b) Posílena bezpečnost a ošetření chyb (P1)
+      → HTML escapování v reportech (report.rs)
+      → Typově bezpečné JSON příkazy přes serde_json::json! (ui.rs)
+      → Detekce odpojení sériového zařízení (serial.rs)
+      → Graceful join pracovního vlákna v stop_worker() (main.rs)
+      → Rozlišení NotFound vs. jiných chyb při čtení config.toml
+      → Validační metoda AppConfig::validate() s clamping rozsahů
+
+  [x] 14c) Optimalizace výkonu (P2)
+      → Release profil v Cargo.toml (LTO, codegen-units=1, strip)
+      → Deduplikace logiky zoomu v ui.rs
+      → O(1) klouzavý průměr s RunningAvg strukturou (datamanager.rs)
+      → Efektivní vykreslování metrik (&str místo String) v ui.rs
+
+  [x] 14d) Vylepšení návrhu a architektury (P2-P3)
+      → Konfigurovatelný demo interval z config.toml (demo.rs)
+      → Validace minimálního počtu sloupců v CSV parseru (demo.rs)
+      → Delta výpočet energie ΔE = E_last - E_first (report.rs)
+      → Odstranění mrtvých error variant z error.rs
+      → Dokumentace hardcoded fan_control_temperature_c (protocol.rs)
+      → Dokumentace Linux portů v config.toml komentáři
+
+  [x] 14e) Rozšíření testovacího pokrytí (P3)
+      → 3 nové testy pro logger.rs (formátování, flush, CSV hlavička)
+      → 2 nové testy pro serial.rs (konstanty, magic bytes)
+      → #[ignore] pro filesystem-závislý demo test
+      → RAII CleanupGuard pro config.rs roundtrip test
+      → Nový test souběžné detekce kanálových a aux anomálií
+      → 2 nové testy pro validaci konfigurace
+      → 1 nový test pro CSV parser validaci
+      → Celkem: 59 → 68 testů (+ 1 ignorovaný)
+
+================================================================================
+  POZNÁMKA: Všechny změny by měly být implementovány postupně.
+  Po každé změně: cargo build + cargo clippy + cargo test = vše zelené.
+================================================================================
+
+
 

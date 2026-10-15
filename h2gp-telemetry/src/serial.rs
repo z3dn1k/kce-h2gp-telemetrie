@@ -4,14 +4,16 @@
 //! searching for ASCII `"H2GP"` magic bytes (`0x48`, `0x32`, `0x47`, `0x50`),
 //! binary packet unpacking, and bidirectional command uplink to the car's MCU.
 
+use crate::error::TelemetryError;
+use crate::logger;
+use crate::protocol::{
+    decode_ina_channel, decode_rev3_aux, TelemetrySample, TELEMETRY_KIND_AUX, TELEMETRY_PACKET_SIZE,
+};
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::time::Duration;
-use crate::protocol::{TelemetrySample, decode_ina_channel, decode_rev3_aux, TELEMETRY_PACKET_SIZE, TELEMETRY_KIND_AUX};
-use crate::error::TelemetryError;
-use crate::logger;
 
 const USB_FRAME_MAGIC: [u8; 4] = [0x48, 0x32, 0x47, 0x50]; // "H2GP" in ASCII
 const USB_HEADER_SIZE: usize = 10;
@@ -40,8 +42,8 @@ pub fn detect_available_ports() -> Vec<String> {
 /// and dispatches them to the UI thread via `tx`. Concurrently polls `cmd_rx` to
 /// transmit uplink JSON commands back to the microcontroller.
 pub fn start_serial_thread(
-    port_name: String, 
-    baud_rate: u32, 
+    port_name: String,
+    baud_rate: u32,
     tx: Sender<TelemetrySample>,
     cmd_rx: Receiver<String>,
     is_running: Arc<AtomicBool>,
@@ -65,7 +67,10 @@ fn run_serial_loop(
     cmd_rx: &Receiver<String>,
     is_running: &AtomicBool,
 ) -> Result<(), TelemetryError> {
-    println!("Serial thread started on port: {} at {} baud", port_name, baud_rate);
+    println!(
+        "Serial thread started on port: {} at {} baud",
+        port_name, baud_rate
+    );
 
     let mut port = serialport::new(port_name, baud_rate)
         .timeout(Duration::from_millis(20))
@@ -82,8 +87,8 @@ fn run_serial_loop(
     })?;
 
     let mut buffer: Vec<u8> = Vec::with_capacity(4096);
-    let mut chunk = [0u8; 1024]; 
-    let serial_start_time = std::time::Instant::now(); 
+    let mut chunk = [0u8; 1024];
+    let serial_start_time = std::time::Instant::now();
 
     while is_running.load(Ordering::Relaxed) {
         // Check for outgoing commands from the UI
@@ -110,11 +115,11 @@ fn run_serial_loop(
                         let keep = buffer.len().min(3);
                         let discard_to = buffer.len() - keep;
                         buffer.drain(0..discard_to);
-                        break; 
+                        break;
                     }
 
                     if buffer.len() < USB_HEADER_SIZE {
-                        break; 
+                        break;
                     }
 
                     let kind = buffer[4];
@@ -127,7 +132,7 @@ fn run_serial_loop(
                     }
 
                     if buffer.len() < frame_length {
-                        break; 
+                        break;
                     }
 
                     let payload = &buffer[USB_HEADER_SIZE..frame_length];
@@ -146,8 +151,8 @@ fn run_serial_loop(
                         };
 
                         logger::append_to_csv(&sample, "data.csv");
-                        tx.send(sample).map_err(|_| TelemetryError::ChannelDisconnected)?;
-                        
+                        tx.send(sample)
+                            .map_err(|_| TelemetryError::ChannelDisconnected)?;
                     } else if kind == TELEMETRY_KIND_AUX {
                         let aux_data = decode_rev3_aux(payload);
                         let sample = TelemetrySample {
@@ -159,7 +164,8 @@ fn run_serial_loop(
                             has_rev3_aux: true,
                         };
 
-                        tx.send(sample).map_err(|_| TelemetryError::ChannelDisconnected)?;
+                        tx.send(sample)
+                            .map_err(|_| TelemetryError::ChannelDisconnected)?;
                     }
 
                     buffer.drain(0..frame_length);
@@ -171,9 +177,9 @@ fn run_serial_loop(
                 let fatal = matches!(
                     e.kind(),
                     std::io::ErrorKind::BrokenPipe
-                    | std::io::ErrorKind::NotFound
-                    | std::io::ErrorKind::PermissionDenied
-                    | std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::NotFound
+                        | std::io::ErrorKind::PermissionDenied
+                        | std::io::ErrorKind::ConnectionReset
                 );
                 if fatal {
                     eprintln!("[serial] Fatal error (device disconnected?): {}", e);

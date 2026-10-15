@@ -44,7 +44,7 @@ pub struct ChannelData {
     /// Accumulated electrical energy in Joules (J).
     pub e: f64,
     /// Accumulated electric charge in Ampere-hours (Ah).
-    pub ah: f64, 
+    pub ah: f64,
     /// Internal INA228 die temperature in degrees Celsius (°C).
     pub t: f64,
 }
@@ -115,7 +115,7 @@ fn sign_extend_40(value: u64) -> i64 {
 }
 
 /// Decodes a 28-byte binary payload into floating point telemetry data.
-/// Uses safe slice extraction to guarantee panic-free execution even if 
+/// Uses safe slice extraction to guarantee panic-free execution even if
 /// the serial buffer provides malformed or truncated data.
 pub fn decode_ina_channel(input: &[u8]) -> ChannelData {
     if input.len() < 28 {
@@ -123,10 +123,12 @@ pub fn decode_ina_channel(input: &[u8]) -> ChannelData {
     }
 
     // Safe slice conversions replacing all .unwrap() calls
-    let shunt_raw = sign_extend_20(u32::from_le_bytes(input[0..4].try_into().unwrap_or([0; 4])) >> 4);
+    let shunt_raw =
+        sign_extend_20(u32::from_le_bytes(input[0..4].try_into().unwrap_or([0; 4])) >> 4);
     let bus_voltage_raw = u32::from_le_bytes(input[4..8].try_into().unwrap_or([0; 4]));
     let die_temp_raw = i16::from_le_bytes(input[8..10].try_into().unwrap_or([0; 2]));
-    let current_raw = sign_extend_20(u32::from_le_bytes(input[10..14].try_into().unwrap_or([0; 4])) >> 4);
+    let current_raw =
+        sign_extend_20(u32::from_le_bytes(input[10..14].try_into().unwrap_or([0; 4])) >> 4);
     let power_raw = u32::from_le_bytes(input[14..18].try_into().unwrap_or([0; 4]));
     let energy_raw = get_u40_le(&input[18..23]);
     let charge_raw = sign_extend_40(get_u40_le(&input[23..28]));
@@ -159,20 +161,28 @@ pub fn decode_rev3_aux(input: &[u8]) -> Rev3AuxData {
     }
 
     let sensor_count = input[0];
-    
+
     let temperature_c = std::array::from_fn(|i| {
         let offset = 1 + i * 2;
         if offset + 2 <= input.len() {
-            let raw = i16::from_le_bytes(input[offset..offset+2].try_into().unwrap_or([0; 2]));
-            if raw == i16::MIN { -127.0 } else { (raw as f64) / 16.0 }
+            let raw = i16::from_le_bytes(input[offset..offset + 2].try_into().unwrap_or([0; 2]));
+            if raw == i16::MIN {
+                -127.0
+            } else {
+                (raw as f64) / 16.0
+            }
         } else {
             -127.0
         }
     });
 
     let max_temp_raw = i16::from_le_bytes(input[9..11].try_into().unwrap_or([0; 2]));
-    let max_temperature_c = if max_temp_raw == i16::MIN { -127.0 } else { (max_temp_raw as f64) / 16.0 };
-    
+    let max_temperature_c = if max_temp_raw == i16::MIN {
+        -127.0
+    } else {
+        (max_temp_raw as f64) / 16.0
+    };
+
     let fan_duty_percent = input[11];
     let flags = u16::from_le_bytes(input[12..14].try_into().unwrap_or([0; 2]));
     let fan_mode = if input.len() > 14 { input[14] } else { 0 };

@@ -5,14 +5,14 @@
 //! energy split ratios, regenerative braking harvest, thermal stress,
 //! and safety incident timelines.
 
+use crate::anomaly::AnomalySeverity;
+use crate::error::TelemetryError;
+use crate::protocol::TelemetrySample;
+use crate::AnomalyRecord;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::protocol::TelemetrySample;
-use crate::anomaly::AnomalySeverity;
-use crate::AnomalyRecord;
-use crate::error::TelemetryError;
 
 /// An individual incident entry in the post-race summary report.
 #[derive(Debug, Clone, PartialEq)]
@@ -153,7 +153,11 @@ impl SessionReport {
         } else {
             stint_duration_s
         };
-        let duration_s = if measured_duration_s > 0.0 { measured_duration_s } else { stint_duration_s };
+        let duration_s = if measured_duration_s > 0.0 {
+            measured_duration_s
+        } else {
+            stint_duration_s
+        };
 
         let avg_pps = if duration_s > 0.5 {
             (total_samples as f64 / duration_s).min(100.0)
@@ -164,8 +168,11 @@ impl SessionReport {
         // Energy totals from the last recorded sample
         let first_sample = history.first();
         let last_sample = history.last();
-        let fc_energy_j = (last_sample.map_or(0.0, |s| s.fc.e) - first_sample.map_or(0.0, |s| s.fc.e)).max(0.0);
-        let batt_energy_j = (last_sample.map_or(0.0, |s| s.batt.e) - first_sample.map_or(0.0, |s| s.batt.e)).max(0.0);
+        let fc_energy_j =
+            (last_sample.map_or(0.0, |s| s.fc.e) - first_sample.map_or(0.0, |s| s.fc.e)).max(0.0);
+        let batt_energy_j = (last_sample.map_or(0.0, |s| s.batt.e)
+            - first_sample.map_or(0.0, |s| s.batt.e))
+        .max(0.0);
         let total_energy_j = fc_energy_j + batt_energy_j;
         let fc_energy_ratio_pct = if total_energy_j > 0.001 {
             (fc_energy_j / total_energy_j) * 100.0
@@ -199,10 +206,18 @@ impl SessionReport {
             sum_fc_power += sample.fc.p;
             sum_batt_power += sample.batt.p;
 
-            if sample.fc.p > peak_fc_power_w { peak_fc_power_w = sample.fc.p; }
-            if sample.batt.p > peak_batt_power_w { peak_batt_power_w = sample.batt.p; }
-            if sample.batt.i > peak_batt_current_a { peak_batt_current_a = sample.batt.i; }
-            if sample.fc.i > peak_fc_current_a { peak_fc_current_a = sample.fc.i; }
+            if sample.fc.p > peak_fc_power_w {
+                peak_fc_power_w = sample.fc.p;
+            }
+            if sample.batt.p > peak_batt_power_w {
+                peak_batt_power_w = sample.batt.p;
+            }
+            if sample.batt.i > peak_batt_current_a {
+                peak_batt_current_a = sample.batt.i;
+            }
+            if sample.fc.i > peak_fc_current_a {
+                peak_fc_current_a = sample.fc.i;
+            }
 
             // Lowest FC voltage under load (ignoring disconnected fuel cell < 2.0 V)
             if sample.fc.v >= 2.0 && sample.fc.v < min_fc_voltage_v {
@@ -211,12 +226,20 @@ impl SessionReport {
 
             // Temperatures (filter out invalid disconnected values < -30°C)
             if sample.batt.t > -30.0 {
-                if sample.batt.t > max_batt_temp_c { max_batt_temp_c = sample.batt.t; }
-                if sample.batt.t < min_batt_temp_c { min_batt_temp_c = sample.batt.t; }
+                if sample.batt.t > max_batt_temp_c {
+                    max_batt_temp_c = sample.batt.t;
+                }
+                if sample.batt.t < min_batt_temp_c {
+                    min_batt_temp_c = sample.batt.t;
+                }
             }
             if sample.fc.t > -30.0 {
-                if sample.fc.t > max_fc_temp_c { max_fc_temp_c = sample.fc.t; }
-                if sample.fc.t < min_fc_temp_c { min_fc_temp_c = sample.fc.t; }
+                if sample.fc.t > max_fc_temp_c {
+                    max_fc_temp_c = sample.fc.t;
+                }
+                if sample.fc.t < min_fc_temp_c {
+                    min_fc_temp_c = sample.fc.t;
+                }
             }
 
             // Regenerative braking: negative battery current
@@ -252,10 +275,18 @@ impl SessionReport {
         if min_fc_voltage_v.is_infinite() {
             min_fc_voltage_v = 0.0;
         }
-        if min_batt_temp_c > 500.0 { min_batt_temp_c = 0.0; }
-        if max_batt_temp_c < -50.0 { max_batt_temp_c = 0.0; }
-        if min_fc_temp_c > 500.0 { min_fc_temp_c = 0.0; }
-        if max_fc_temp_c < -50.0 { max_fc_temp_c = 0.0; }
+        if min_batt_temp_c > 500.0 {
+            min_batt_temp_c = 0.0;
+        }
+        if max_batt_temp_c < -50.0 {
+            max_batt_temp_c = 0.0;
+        }
+        if min_fc_temp_c > 500.0 {
+            min_fc_temp_c = 0.0;
+        }
+        if max_fc_temp_c < -50.0 {
+            max_fc_temp_c = 0.0;
+        }
 
         // Process anomalies
         let mut critical_count = 0;
@@ -307,9 +338,9 @@ impl SessionReport {
     /// Escapes special HTML characters to prevent DOM corruption in exported reports.
     fn escape_html(s: &str) -> String {
         s.replace('&', "&amp;")
-         .replace('<', "&lt;")
-         .replace('>', "&gt;")
-         .replace('"', "&quot;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
     }
 
     /// Exports the report as a modern, self-contained HTML document to the specified path.
@@ -341,10 +372,19 @@ impl SessionReport {
         writeln!(file, "<html lang=\"cs\">")?;
         writeln!(file, "<head>")?;
         writeln!(file, "  <meta charset=\"UTF-8\">")?;
-        writeln!(file, "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")?;
-        writeln!(file, "  <title>H2GP Telemetrie — Závěrečný report [{}]</title>", Self::escape_html(driver_code))?;
+        writeln!(
+            file,
+            "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
+        )?;
+        writeln!(
+            file,
+            "  <title>H2GP Telemetrie — Závěrečný report [{}]</title>",
+            Self::escape_html(driver_code)
+        )?;
         writeln!(file, "  <style>")?;
-        writeln!(file, r#"
+        writeln!(
+            file,
+            r#"
     :root {{
       --bg: #0d0f12;
       --card-bg: #161a20;
@@ -464,7 +504,8 @@ impl SessionReport {
       .card-val {{ color: #000 !important; }}
       header {{ border-bottom: 2px solid #000; }}
     }}
-  "#)?;
+  "#
+        )?;
         writeln!(file, "  </style>")?;
         writeln!(file, "</head>")?;
         writeln!(file, "<body>")?;
@@ -484,54 +525,142 @@ impl SessionReport {
         // KPI Grid 1: Stint & Energy
         writeln!(file, "    <div class=\"grid\">")?;
         writeln!(file, "      <div class=\"card\">")?;
-        writeln!(file, "        <div class=\"card-title\">Délka jízdy & Pakety</div>")?;
-        writeln!(file, "        <div class=\"card-val cyan\">{:02}:{:04.1}</div>", (self.duration_s as u32) / 60, self.duration_s % 60.0)?;
-        writeln!(file, "        <div class=\"card-detail\">{} vzorků @ {:.1} PPS</div>", self.total_samples, self.avg_pps)?;
+        writeln!(
+            file,
+            "        <div class=\"card-title\">Délka jízdy & Pakety</div>"
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-val cyan\">{:02}:{:04.1}</div>",
+            (self.duration_s as u32) / 60,
+            self.duration_s % 60.0
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-detail\">{} vzorků @ {:.1} PPS</div>",
+            self.total_samples, self.avg_pps
+        )?;
         writeln!(file, "      </div>")?;
 
         writeln!(file, "      <div class=\"card\">")?;
-        writeln!(file, "        <div class=\"card-title\">Hybridní bilance (FC Podíl)</div>")?;
-        writeln!(file, "        <div class=\"card-val accent\">{:.1} %</div>", self.fc_energy_ratio_pct)?;
-        writeln!(file, "        <div class=\"card-detail\">FC: {:.1} J | Baterie: {:.1} J</div>", self.fc_energy_j, self.batt_energy_j)?;
+        writeln!(
+            file,
+            "        <div class=\"card-title\">Hybridní bilance (FC Podíl)</div>"
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-val accent\">{:.1} %</div>",
+            self.fc_energy_ratio_pct
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-detail\">FC: {:.1} J | Baterie: {:.1} J</div>",
+            self.fc_energy_j, self.batt_energy_j
+        )?;
         writeln!(file, "      </div>")?;
 
         writeln!(file, "      <div class=\"card\">")?;
-        writeln!(file, "        <div class=\"card-title\">Sklizeň rekuperace</div>")?;
-        writeln!(file, "        <div class=\"card-val accent\">+{:.1} J</div>", self.regen_energy_j)?;
-        writeln!(file, "        <div class=\"card-detail\">+{:.4} Ah | Max: {:.2} A</div>", self.regen_ah, self.peak_regen_current_a)?;
+        writeln!(
+            file,
+            "        <div class=\"card-title\">Sklizeň rekuperace</div>"
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-val accent\">+{:.1} J</div>",
+            self.regen_energy_j
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-detail\">+{:.4} Ah | Max: {:.2} A</div>",
+            self.regen_ah, self.peak_regen_current_a
+        )?;
         writeln!(file, "      </div>")?;
 
         writeln!(file, "      <div class=\"card\">")?;
-        writeln!(file, "        <div class=\"card-title\">Celková energie</div>")?;
-        writeln!(file, "        <div class=\"card-val\">{:.1} J</div>", self.total_energy_j)?;
-        writeln!(file, "        <div class=\"card-detail\">Prům. příkon: {:.1} W</div>", self.avg_total_power_w)?;
+        writeln!(
+            file,
+            "        <div class=\"card-title\">Celková energie</div>"
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-val\">{:.1} J</div>",
+            self.total_energy_j
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-detail\">Prům. příkon: {:.1} W</div>",
+            self.avg_total_power_w
+        )?;
         writeln!(file, "      </div>")?;
         writeln!(file, "    </div>")?;
 
         // KPI Grid 2: Electrical & Thermals
         writeln!(file, "    <div class=\"grid\">")?;
         writeln!(file, "      <div class=\"card\">")?;
-        writeln!(file, "        <div class=\"card-title\">Špičkový výkon (P_max)</div>")?;
-        writeln!(file, "        <div class=\"card-val\">{:.1} W</div>", self.peak_batt_power_w.max(self.peak_fc_power_w))?;
-        writeln!(file, "        <div class=\"card-detail\">Batt P_max: {:.1} W | FC P_max: {:.1} W</div>", self.peak_batt_power_w, self.peak_fc_power_w)?;
+        writeln!(
+            file,
+            "        <div class=\"card-title\">Špičkový výkon (P_max)</div>"
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-val\">{:.1} W</div>",
+            self.peak_batt_power_w.max(self.peak_fc_power_w)
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-detail\">Batt P_max: {:.1} W | FC P_max: {:.1} W</div>",
+            self.peak_batt_power_w, self.peak_fc_power_w
+        )?;
         writeln!(file, "      </div>")?;
 
         writeln!(file, "      <div class=\"card\">")?;
-        writeln!(file, "        <div class=\"card-title\">Špičkový proud (I_max)</div>")?;
-        writeln!(file, "        <div class=\"card-val warn\">{:.2} A</div>", self.peak_batt_current_a)?;
-        writeln!(file, "        <div class=\"card-detail\">Batt: {:.2} A | FC: {:.2} A</div>", self.peak_batt_current_a, self.peak_fc_current_a)?;
+        writeln!(
+            file,
+            "        <div class=\"card-title\">Špičkový proud (I_max)</div>"
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-val warn\">{:.2} A</div>",
+            self.peak_batt_current_a
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-detail\">Batt: {:.2} A | FC: {:.2} A</div>",
+            self.peak_batt_current_a, self.peak_fc_current_a
+        )?;
         writeln!(file, "      </div>")?;
 
         writeln!(file, "      <div class=\"card\">")?;
-        writeln!(file, "        <div class=\"card-title\">Min. napětí FC pod zátěží</div>")?;
-        writeln!(file, "        <div class=\"card-val\">{:.2} V</div>", self.min_fc_voltage_v)?;
-        writeln!(file, "        <div class=\"card-detail\">Indikace hladovění vodíku (&lt; 9.0 V)</div>")?;
+        writeln!(
+            file,
+            "        <div class=\"card-title\">Min. napětí FC pod zátěží</div>"
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-val\">{:.2} V</div>",
+            self.min_fc_voltage_v
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-detail\">Indikace hladovění vodíku (&lt; 9.0 V)</div>"
+        )?;
         writeln!(file, "      </div>")?;
 
         writeln!(file, "      <div class=\"card\">")?;
-        writeln!(file, "        <div class=\"card-title\">Teplotní extrémy</div>")?;
-        writeln!(file, "        <div class=\"card-val\">{:.1} °C</div>", self.max_batt_temp_c.max(self.max_fc_temp_c))?;
-        writeln!(file, "        <div class=\"card-detail\">Batt Max: {:.1} °C | FC Max: {:.1} °C</div>", self.max_batt_temp_c, self.max_fc_temp_c)?;
+        writeln!(
+            file,
+            "        <div class=\"card-title\">Teplotní extrémy</div>"
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-val\">{:.1} °C</div>",
+            self.max_batt_temp_c.max(self.max_fc_temp_c)
+        )?;
+        writeln!(
+            file,
+            "        <div class=\"card-detail\">Batt Max: {:.1} °C | FC Max: {:.1} °C</div>",
+            self.max_batt_temp_c, self.max_fc_temp_c
+        )?;
         writeln!(file, "      </div>")?;
         writeln!(file, "    </div>")?;
 
@@ -557,8 +686,16 @@ impl SessionReport {
 
                 writeln!(file, "          <tr>")?;
                 writeln!(file, "            <td style=\"font-family: monospace; font-size: 12px;\">{:02}:{:04.1}</td>", m, s)?;
-                writeln!(file, "            <td class=\"{}\">{}</td>", badge_class, tag)?;
-                writeln!(file, "            <td>{}</td>", Self::escape_html(&inc.description))?;
+                writeln!(
+                    file,
+                    "            <td class=\"{}\">{}</td>",
+                    badge_class, tag
+                )?;
+                writeln!(
+                    file,
+                    "            <td>{}</td>",
+                    Self::escape_html(&inc.description)
+                )?;
                 writeln!(file, "          </tr>")?;
             }
             writeln!(file, "        </tbody>")?;
@@ -579,7 +716,11 @@ impl SessionReport {
     }
 
     /// Exports the report as a clean GitHub-Flavored Markdown file.
-    pub fn export_markdown(&self, driver_code: &str, file_path: &Path) -> Result<(), TelemetryError> {
+    pub fn export_markdown(
+        &self,
+        driver_code: &str,
+        file_path: &Path,
+    ) -> Result<(), TelemetryError> {
         if let Some(parent) = file_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -598,11 +739,18 @@ impl SessionReport {
             writeln!(file)?;
         } else if self.warning_count > 0 {
             writeln!(file, "> [!WARNING]")?;
-            writeln!(file, "> **Varování:** Zaznamenáno {} provozních odchylek.", self.warning_count)?;
+            writeln!(
+                file,
+                "> **Varování:** Zaznamenáno {} provozních odchylek.",
+                self.warning_count
+            )?;
             writeln!(file)?;
         } else {
             writeln!(file, "> [!NOTE]")?;
-            writeln!(file, "> **Nominální stav:** Jízda proběhla bez zaznamenaných anomálií.")?;
+            writeln!(
+                file,
+                "> **Nominální stav:** Jízda proběhla bez zaznamenaných anomálií."
+            )?;
             writeln!(file)?;
         }
 
@@ -610,26 +758,75 @@ impl SessionReport {
         writeln!(file)?;
         writeln!(file, "| Parametr | Hodnota | Poznámka |")?;
         writeln!(file, "| :--- | :--- | :--- |")?;
-        writeln!(file, "| **Podíl palivového článku** | **{:.1} %** | Cíl pro vytrvalost: > 70 % |", self.fc_energy_ratio_pct)?;
-        writeln!(file, "| **Energie palivového článku** | {:.2} J | Dodáno z vodíku |", self.fc_energy_j)?;
-        writeln!(file, "| **Energie akumulátoru** | {:.2} J | Dodáno z LiPo |", self.batt_energy_j)?;
-        writeln!(file, "| **Celková spotřebovaná energie** | {:.2} J | Celkový výdej vozu |", self.total_energy_j)?;
+        writeln!(
+            file,
+            "| **Podíl palivového článku** | **{:.1} %** | Cíl pro vytrvalost: > 70 % |",
+            self.fc_energy_ratio_pct
+        )?;
+        writeln!(
+            file,
+            "| **Energie palivového článku** | {:.2} J | Dodáno z vodíku |",
+            self.fc_energy_j
+        )?;
+        writeln!(
+            file,
+            "| **Energie akumulátoru** | {:.2} J | Dodáno z LiPo |",
+            self.batt_energy_j
+        )?;
+        writeln!(
+            file,
+            "| **Celková spotřebovaná energie** | {:.2} J | Celkový výdej vozu |",
+            self.total_energy_j
+        )?;
         writeln!(file, "| **Rekuperovaná energie brzděním** | **+{:.2} J** (+{:.4} Ah) | Ušetřeno motorgenerátorem |", self.regen_energy_j, self.regen_ah)?;
-        writeln!(file, "| **Špičkový rekuperační proud** | {:.2} A | Maximální brzdný proud |", self.peak_regen_current_a)?;
+        writeln!(
+            file,
+            "| **Špičkový rekuperační proud** | {:.2} A | Maximální brzdný proud |",
+            self.peak_regen_current_a
+        )?;
         writeln!(file)?;
 
         writeln!(file, "## 2. Výkonové a tepelné extrémy")?;
         writeln!(file)?;
-        writeln!(file, "| Metrika | Baterie (LiPo) | Palivový článek (FC) | Celkem |")?;
+        writeln!(
+            file,
+            "| Metrika | Baterie (LiPo) | Palivový článek (FC) | Celkem |"
+        )?;
         writeln!(file, "| :--- | :--- | :--- | :--- |")?;
-        writeln!(file, "| **Průměrný výkon** | {:.2} W | {:.2} W | **{:.2} W** |", self.avg_batt_power_w, self.avg_fc_power_w, self.avg_total_power_w)?;
-        writeln!(file, "| **Špičkový výkon (P_max)** | {:.2} W | {:.2} W | **{:.2} W** |", self.peak_batt_power_w, self.peak_fc_power_w, self.peak_batt_power_w.max(self.peak_fc_power_w))?;
-        writeln!(file, "| **Špičkový proud (I_max)** | {:.2} A | {:.2} A | — |", self.peak_batt_current_a, self.peak_fc_current_a)?;
-        writeln!(file, "| **Min. napětí pod zátěží** | — | **{:.2} V** | Limit hladovění: 9.0 V |", self.min_fc_voltage_v)?;
-        writeln!(file, "| **Maximální teplota** | {:.1} °C | {:.1} °C | Limit: 45.0 °C |", self.max_batt_temp_c, self.max_fc_temp_c)?;
+        writeln!(
+            file,
+            "| **Průměrný výkon** | {:.2} W | {:.2} W | **{:.2} W** |",
+            self.avg_batt_power_w, self.avg_fc_power_w, self.avg_total_power_w
+        )?;
+        writeln!(
+            file,
+            "| **Špičkový výkon (P_max)** | {:.2} W | {:.2} W | **{:.2} W** |",
+            self.peak_batt_power_w,
+            self.peak_fc_power_w,
+            self.peak_batt_power_w.max(self.peak_fc_power_w)
+        )?;
+        writeln!(
+            file,
+            "| **Špičkový proud (I_max)** | {:.2} A | {:.2} A | — |",
+            self.peak_batt_current_a, self.peak_fc_current_a
+        )?;
+        writeln!(
+            file,
+            "| **Min. napětí pod zátěží** | — | **{:.2} V** | Limit hladovění: 9.0 V |",
+            self.min_fc_voltage_v
+        )?;
+        writeln!(
+            file,
+            "| **Maximální teplota** | {:.1} °C | {:.1} °C | Limit: 45.0 °C |",
+            self.max_batt_temp_c, self.max_fc_temp_c
+        )?;
         writeln!(file)?;
 
-        writeln!(file, "## 3. Záznam incidentů a anomálií ({})", self.incidents.len())?;
+        writeln!(
+            file,
+            "## 3. Záznam incidentů a anomálií ({})",
+            self.incidents.len()
+        )?;
         writeln!(file)?;
         if self.incidents.is_empty() {
             writeln!(file, "*Žádné anomálie nebyly zaznamenány.*")?;
@@ -641,7 +838,11 @@ impl SessionReport {
                 let m = (time_sec as u32) / 60;
                 let s = time_sec % 60.0;
                 let tag = inc.severity.tag_prefix();
-                writeln!(file, "| `{:02}:{:04.1}` | **{}** | {} |", m, s, tag, inc.description)?;
+                writeln!(
+                    file,
+                    "| `{:02}:{:04.1}` | **{}** | {} |",
+                    m, s, tag, inc.description
+                )?;
             }
         }
 
@@ -670,13 +871,26 @@ impl SessionReport {
              Max. teplota FC       : {:.1} °C\n\
              Počet incidentů       : {} (Krit: {}, Var: {})\n\
              ========================================",
-            driver_code, date_str, time_str,
-            (self.duration_s as u32) / 60, self.duration_s % 60.0,
-            self.fc_energy_ratio_pct, self.fc_energy_j, self.batt_energy_j,
-            self.total_energy_j, self.regen_energy_j, self.regen_ah,
-            self.avg_total_power_w, self.peak_batt_current_a, self.peak_fc_current_a,
-            self.min_fc_voltage_v, self.max_batt_temp_c, self.max_fc_temp_c,
-            self.incidents.len(), self.critical_count, self.warning_count
+            driver_code,
+            date_str,
+            time_str,
+            (self.duration_s as u32) / 60,
+            self.duration_s % 60.0,
+            self.fc_energy_ratio_pct,
+            self.fc_energy_j,
+            self.batt_energy_j,
+            self.total_energy_j,
+            self.regen_energy_j,
+            self.regen_ah,
+            self.avg_total_power_w,
+            self.peak_batt_current_a,
+            self.peak_fc_current_a,
+            self.min_fc_voltage_v,
+            self.max_batt_temp_c,
+            self.max_fc_temp_c,
+            self.incidents.len(),
+            self.critical_count,
+            self.warning_count
         )
     }
 }
@@ -694,7 +908,10 @@ pub fn generate_timestamp_slug() -> String {
     let seconds = day_secs % 60;
 
     let (year, month, day) = civil_from_days(days);
-    format!("{:04}{:02}{:02}_{:02}{:02}{:02}", year, month, day, hours, minutes, seconds)
+    format!(
+        "{:04}{:02}{:02}_{:02}{:02}{:02}",
+        year, month, day, hours, minutes, seconds
+    )
 }
 
 /// Helper function to format current UTC date and time as strings.
@@ -742,7 +959,15 @@ mod tests {
     use super::*;
     use crate::protocol::{ChannelData, Rev3AuxData};
 
-    fn make_sample(ts: u32, batt_v: f64, batt_i: f64, fc_v: f64, fc_i: f64, batt_e: f64, fc_e: f64) -> TelemetrySample {
+    fn make_sample(
+        ts: u32,
+        batt_v: f64,
+        batt_i: f64,
+        fc_v: f64,
+        fc_i: f64,
+        batt_e: f64,
+        fc_e: f64,
+    ) -> TelemetrySample {
         TelemetrySample {
             timestamp_ms: ts,
             batt: ChannelData {
@@ -792,11 +1017,22 @@ mod tests {
 
         assert_eq!(report.total_samples, 3);
         // Delta energy: fc = 100.0 - 48.0 = 52.0, batt = 50.0 - 37.0 = 13.0
-        assert!(report.fc_energy_j >= 50.0, "FC delta energy should be ~52J, got {}", report.fc_energy_j);
-        assert!(report.batt_energy_j >= 12.0, "Batt delta energy should be ~13J, got {}", report.batt_energy_j);
+        assert!(
+            report.fc_energy_j >= 50.0,
+            "FC delta energy should be ~52J, got {}",
+            report.fc_energy_j
+        );
+        assert!(
+            report.batt_energy_j >= 12.0,
+            "Batt delta energy should be ~13J, got {}",
+            report.batt_energy_j
+        );
         assert!(report.fc_energy_ratio_pct > 60.0);
         // Regen was detected
-        assert!(report.regen_energy_j > 0.0, "Expected positive harvested regen energy");
+        assert!(
+            report.regen_energy_j > 0.0,
+            "Expected positive harvested regen energy"
+        );
         assert!(report.regen_ah > 0.0);
         assert_eq!(report.peak_regen_current_a, -2.0);
     }
@@ -807,13 +1043,11 @@ mod tests {
             make_sample(0, 7.4, 3.0, 12.0, 4.0, 10.0, 20.0),
             make_sample(1000, 7.4, 3.0, 12.0, 4.0, 30.0, 60.0),
         ];
-        let anomalies = vec![
-            AnomalyRecord {
-                timestamp_ms: 500,
-                severity: AnomalySeverity::Warning,
-                ui_text: "FC V-DROP : 10.2 V".to_string(),
-            }
-        ];
+        let anomalies = vec![AnomalyRecord {
+            timestamp_ms: 500,
+            severity: AnomalySeverity::Warning,
+            ui_text: "FC V-DROP : 10.2 V".to_string(),
+        }];
 
         let report = SessionReport::from_telemetry(&samples, &anomalies, 1.0, 10.0);
         assert_eq!(report.warning_count, 1);
@@ -865,7 +1099,10 @@ mod tests {
             if !samples.is_empty() {
                 let report = SessionReport::from_telemetry(&samples, &[], 80.0, 10.0);
                 assert!(report.total_samples >= 500);
-                assert!(report.regen_energy_j > 0.0, "Expected regen energy from braking in data.csv");
+                assert!(
+                    report.regen_energy_j > 0.0,
+                    "Expected regen energy from braking in data.csv"
+                );
                 assert!(report.regen_ah > 0.0);
                 assert!(report.fc_energy_ratio_pct > 0.0 && report.fc_energy_ratio_pct < 100.0);
             }
@@ -874,9 +1111,15 @@ mod tests {
 
     #[test]
     fn test_html_escape_special_chars() {
-        assert_eq!(SessionReport::escape_html("<script>alert('xss')</script>"), "&lt;script&gt;alert('xss')&lt;/script&gt;");
+        assert_eq!(
+            SessionReport::escape_html("<script>alert('xss')</script>"),
+            "&lt;script&gt;alert('xss')&lt;/script&gt;"
+        );
         assert_eq!(SessionReport::escape_html("AT&T"), "AT&amp;T");
-        assert_eq!(SessionReport::escape_html(r#"say "hi""#), "say &quot;hi&quot;");
+        assert_eq!(
+            SessionReport::escape_html(r#"say "hi""#),
+            "say &quot;hi&quot;"
+        );
         assert_eq!(SessionReport::escape_html("normal text"), "normal text");
     }
 }

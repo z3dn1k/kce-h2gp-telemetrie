@@ -4,6 +4,8 @@
 //! Employs a synthetic monotonic clock to guarantee smooth graph rendering
 //! independent of recording timestamp jitter.
 
+use crate::error::TelemetryError;
+use crate::protocol::{ChannelData, TelemetrySample};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,15 +13,18 @@ use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use crate::protocol::{ChannelData, TelemetrySample};
-use crate::error::TelemetryError;
 
 /// Spawns a dedicated worker thread that replays telemetry rows from a CSV file.
 ///
 /// Reads all lines into memory and continuously transmits reconstituted `TelemetrySample`
 /// structs into `tx` at 100 ms intervals (10 Hz). Stops when `is_running` is set to false
 /// or the channel receiver is closed.
-pub fn start_demo_thread(filename: &str, tx: Sender<TelemetrySample>, is_running: Arc<AtomicBool>, interval_ms: u64) -> std::thread::JoinHandle<()> {
+pub fn start_demo_thread(
+    filename: &str,
+    tx: Sender<TelemetrySample>,
+    is_running: Arc<AtomicBool>,
+    interval_ms: u64,
+) -> std::thread::JoinHandle<()> {
     let filename = filename.to_string();
     thread::spawn(move || {
         if let Err(e) = run_demo_loop(&filename, &tx, &is_running, interval_ms) {
@@ -68,12 +73,13 @@ fn run_demo_loop(
             }
 
             if let Some(sample) = parse_csv_line(line, simulated_time_ms) {
-                tx.send(sample).map_err(|_| TelemetryError::ChannelDisconnected)?;
+                tx.send(sample)
+                    .map_err(|_| TelemetryError::ChannelDisconnected)?;
             }
 
             // Advance simulated time by exactly interval_ms
             simulated_time_ms += interval_ms as u32;
-            thread::sleep(Duration::from_millis(interval_ms)); 
+            thread::sleep(Duration::from_millis(interval_ms));
         }
     }
 
@@ -92,11 +98,16 @@ pub fn parse_csv_line(line: &str, timestamp_ms: u32) -> Option<TelemetrySample> 
     let mut fields = parts.into_iter();
 
     let mut next_f64 = || {
-        fields.next().unwrap_or("0").trim().parse::<f64>().unwrap_or(0.0)
+        fields
+            .next()
+            .unwrap_or("0")
+            .trim()
+            .parse::<f64>()
+            .unwrap_or(0.0)
     };
 
     // Ignore the jagged CSV timestamp to prevent graph resets
-    let _ignored_csv_timestamp = next_f64(); 
+    let _ignored_csv_timestamp = next_f64();
 
     let b_v = next_f64();
     let b_sv = next_f64();
@@ -118,10 +129,22 @@ pub fn parse_csv_line(line: &str, timestamp_ms: u32) -> Option<TelemetrySample> 
         timestamp_ms,
         has_channel_data: true,
         batt: ChannelData {
-            v: b_v, sv_mv: b_sv, i: b_i, p: b_p, e: b_e, ah: b_ah, t: b_t,
+            v: b_v,
+            sv_mv: b_sv,
+            i: b_i,
+            p: b_p,
+            e: b_e,
+            ah: b_ah,
+            t: b_t,
         },
         fc: ChannelData {
-            v: f_v, sv_mv: f_sv, i: f_i, p: f_p, e: f_e, ah: f_ah, t: f_t,
+            v: f_v,
+            sv_mv: f_sv,
+            i: f_i,
+            p: f_p,
+            e: f_e,
+            ah: f_ah,
+            t: f_t,
         },
         has_rev3_aux: false,
         rev3_aux: Default::default(),
@@ -193,10 +216,23 @@ mod tests {
             }
         }
 
-        assert!(sample_count >= 500, "Dataset should have at least 500 samples (got {})", sample_count);
-        assert!(overcurrent_detected, "Dataset should contain BATT OVERCURRENT anomaly");
+        assert!(
+            sample_count >= 500,
+            "Dataset should have at least 500 samples (got {})",
+            sample_count
+        );
+        assert!(
+            overcurrent_detected,
+            "Dataset should contain BATT OVERCURRENT anomaly"
+        );
         assert!(vsag_detected, "Dataset should contain FC V-SAG anomaly");
-        assert!(overtemp_detected, "Dataset should contain BATT OVERTEMP anomaly");
-        assert!(regen_detected, "Dataset should contain regenerative braking (negative current)");
+        assert!(
+            overtemp_detected,
+            "Dataset should contain BATT OVERTEMP anomaly"
+        );
+        assert!(
+            regen_detected,
+            "Dataset should contain regenerative braking (negative current)"
+        );
     }
 }

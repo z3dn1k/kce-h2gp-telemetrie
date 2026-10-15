@@ -6,11 +6,11 @@
 //! Handles fail gracefully with console error diagnostics instead of panicking,
 //! ensuring race telemetry continues unimpeded even if disk operations encounter issues.
 
+use crate::protocol::TelemetrySample;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::sync::{Arc, Mutex, OnceLock};
-use crate::protocol::TelemetrySample;
 
 /// Each log file gets its own `Arc<Mutex<BufWriter>>` so that writes to
 /// different files never contend on the same lock.
@@ -33,11 +33,7 @@ fn get_or_create_writer(filename: &str, header: Option<&str>) -> Option<LogWrite
 
     // First access — open (or create) the file
     let file_exists = std::path::Path::new(filename).exists();
-    let is_empty = !file_exists
-        || std::fs::metadata(filename)
-            .map(|m| m.len())
-            .unwrap_or(0)
-            == 0;
+    let is_empty = !file_exists || std::fs::metadata(filename).map(|m| m.len()).unwrap_or(0) == 0;
 
     let file = match OpenOptions::new().create(true).append(true).open(filename) {
         Ok(f) => f,
@@ -78,8 +74,20 @@ pub fn append_to_csv(sample: &TelemetrySample, filename: &str) {
         writer,
         "{:.1},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.2},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.2}",
         sample.timestamp_ms as f64 / 1000.0,
-        sample.batt.v, sample.batt.sv_mv, sample.batt.i, sample.batt.p, sample.batt.e, sample.batt.ah, sample.batt.t,
-        sample.fc.v, sample.fc.sv_mv, sample.fc.i, sample.fc.p, sample.fc.e, sample.fc.ah, sample.fc.t
+        sample.batt.v,
+        sample.batt.sv_mv,
+        sample.batt.i,
+        sample.batt.p,
+        sample.batt.e,
+        sample.batt.ah,
+        sample.batt.t,
+        sample.fc.v,
+        sample.fc.sv_mv,
+        sample.fc.i,
+        sample.fc.p,
+        sample.fc.e,
+        sample.fc.ah,
+        sample.fc.t
     ) {
         eprintln!("[logger] Write to '{}' failed: {}", filename, e);
     }
@@ -89,7 +97,8 @@ pub fn append_to_csv(sample: &TelemetrySample, filename: &str) {
 pub fn log_anomaly(timestamp_ms: u32, value_str: &str, cause_str: &str, filename: &str) {
     let header = format!(
         "{:<20} {:<30} possible cause\n{}",
-        "time stamp", "value of anomaly",
+        "time stamp",
+        "value of anomaly",
         "-------------------------------------------------------------------------------"
     );
 
@@ -112,13 +121,29 @@ pub fn log_anomaly(timestamp_ms: u32, value_str: &str, cause_str: &str, filename
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{TelemetrySample, ChannelData, Rev3AuxData};
+    use crate::protocol::{ChannelData, Rev3AuxData, TelemetrySample};
 
     fn make_test_sample() -> TelemetrySample {
         TelemetrySample {
             timestamp_ms: 5000,
-            batt: ChannelData { v: 12.5, sv_mv: 1.0, i: 3.2, p: 40.0, e: 100.0, ah: 2.5, t: 28.0 },
-            fc: ChannelData { v: 11.0, sv_mv: 0.5, i: 1.1, p: 12.1, e: 50.0, ah: 1.0, t: 30.0 },
+            batt: ChannelData {
+                v: 12.5,
+                sv_mv: 1.0,
+                i: 3.2,
+                p: 40.0,
+                e: 100.0,
+                ah: 2.5,
+                t: 28.0,
+            },
+            fc: ChannelData {
+                v: 11.0,
+                sv_mv: 0.5,
+                i: 1.1,
+                p: 12.1,
+                e: 50.0,
+                ah: 1.0,
+                t: 30.0,
+            },
             rev3_aux: Rev3AuxData::default(),
             has_channel_data: true,
             has_rev3_aux: false,
@@ -141,7 +166,10 @@ mod tests {
         // Force flush by dropping global state - read what was written
         // The file should exist and contain a header
         let content = std::fs::read_to_string(filename).unwrap_or_default();
-        assert!(content.contains("batt_v"), "CSV header should contain 'batt_v'");
+        assert!(
+            content.contains("batt_v"),
+            "CSV header should contain 'batt_v'"
+        );
         let _ = std::fs::remove_file(filename);
     }
 
@@ -153,9 +181,18 @@ mod tests {
         log_anomaly(65000, "15.2 A", "Overcurrent", filename);
 
         let content = std::fs::read_to_string(filename).unwrap_or_default();
-        assert!(content.contains("01:05"), "Should contain formatted time 01:05 for 65000ms");
-        assert!(content.contains("15.2 A"), "Should contain the value string");
-        assert!(content.contains("Overcurrent"), "Should contain the cause string");
+        assert!(
+            content.contains("01:05"),
+            "Should contain formatted time 01:05 for 65000ms"
+        );
+        assert!(
+            content.contains("15.2 A"),
+            "Should contain the value string"
+        );
+        assert!(
+            content.contains("Overcurrent"),
+            "Should contain the cause string"
+        );
         let _ = std::fs::remove_file(filename);
     }
 
@@ -168,7 +205,10 @@ mod tests {
 
         // Read immediately - should be on disk due to flush()
         let content = std::fs::read_to_string(filename).unwrap_or_default();
-        assert!(!content.is_empty(), "Anomaly should be flushed to disk immediately");
+        assert!(
+            !content.is_empty(),
+            "Anomaly should be flushed to disk immediately"
+        );
         let _ = std::fs::remove_file(filename);
     }
 }

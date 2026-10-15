@@ -7,7 +7,9 @@ use crate::config::AppConfig;
 use crate::protocol::TelemetrySample;
 
 /// Severity level of a detected operational anomaly.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum AnomalySeverity {
     /// Minor anomaly or warning: operating near limits or elevated load (displayed in yellow).
     Warning,
@@ -80,7 +82,14 @@ impl Anomaly {
         let secs = self.timestamp_ms / 1000;
         let m = secs / 60;
         let s = secs % 60;
-        format!("[{:02}:{:02}] [{}] {} : {}", m, s, self.severity.tag_prefix(), self.kind.tag(), self.value_str)
+        format!(
+            "[{:02}:{:02}] [{}] {} : {}",
+            m,
+            s,
+            self.severity.tag_prefix(),
+            self.kind.tag(),
+            self.value_str
+        )
     }
 }
 
@@ -118,7 +127,9 @@ pub fn detect_anomalies(sample: &TelemetrySample, config: &AppConfig) -> Vec<Ano
                 value_str: format!("{:.2} V", sample.fc.v),
                 cause: "Starvation",
             });
-        } else if sample.fc.v < config.anomaly_fc_warn_vsag_v && sample.fc.v >= config.anomaly_fc_vsag_v {
+        } else if sample.fc.v < config.anomaly_fc_warn_vsag_v
+            && sample.fc.v >= config.anomaly_fc_vsag_v
+        {
             anomalies.push(Anomaly {
                 timestamp_ms: sample.timestamp_ms,
                 kind: AnomalyKind::FcVoltageDrop,
@@ -147,7 +158,7 @@ pub fn detect_anomalies(sample: &TelemetrySample, config: &AppConfig) -> Vec<Ano
             });
         }
     }
-    
+
     // 4. FC Short Circuit: Independent check (not else-if) so it fires even when channel data is also present
     if sample.has_rev3_aux && (sample.rev3_aux.flags & 0x01) != 0 {
         anomalies.push(Anomaly {
@@ -172,8 +183,15 @@ mod tests {
             timestamp_ms: 65_000, // 01:05
             has_channel_data: true,
             has_rev3_aux: false,
-            batt: ChannelData { i, t, ..Default::default() },
-            fc: ChannelData { v: 12.0, ..Default::default() },
+            batt: ChannelData {
+                i,
+                t,
+                ..Default::default()
+            },
+            fc: ChannelData {
+                v: 12.0,
+                ..Default::default()
+            },
             rev3_aux: Default::default(),
         }
     }
@@ -186,7 +204,10 @@ mod tests {
         assert_eq!(anoms.len(), 1);
         assert_eq!(anoms[0].kind, AnomalyKind::BattOvercurrent);
         assert_eq!(anoms[0].severity, AnomalySeverity::Critical);
-        assert_eq!(anoms[0].format_ui(), "[01:05] [CRIT] BATT OVERCURRENT : 16.50 A");
+        assert_eq!(
+            anoms[0].format_ui(),
+            "[01:05] [CRIT] BATT OVERCURRENT : 16.50 A"
+        );
     }
 
     #[test]
@@ -197,7 +218,10 @@ mod tests {
         assert_eq!(anoms.len(), 1);
         assert_eq!(anoms[0].kind, AnomalyKind::BattHighLoad);
         assert_eq!(anoms[0].severity, AnomalySeverity::Warning);
-        assert_eq!(anoms[0].format_ui(), "[01:05] [WARN] BATT HIGH LOAD : 13.50 A");
+        assert_eq!(
+            anoms[0].format_ui(),
+            "[01:05] [WARN] BATT HIGH LOAD : 13.50 A"
+        );
     }
 
     #[test]
@@ -287,8 +311,24 @@ mod tests {
         let config = AppConfig::default();
         let sample = TelemetrySample {
             timestamp_ms: 1000,
-            batt: ChannelData { v: 12.0, sv_mv: 0.0, i: 20.0, p: 240.0, e: 0.0, ah: 0.0, t: 25.0 },
-            fc: ChannelData { v: 12.0, sv_mv: 0.0, i: 1.0, p: 12.0, e: 0.0, ah: 0.0, t: 25.0 },
+            batt: ChannelData {
+                v: 12.0,
+                sv_mv: 0.0,
+                i: 20.0,
+                p: 240.0,
+                e: 0.0,
+                ah: 0.0,
+                t: 25.0,
+            },
+            fc: ChannelData {
+                v: 12.0,
+                sv_mv: 0.0,
+                i: 1.0,
+                p: 12.0,
+                e: 0.0,
+                ah: 0.0,
+                t: 25.0,
+            },
             rev3_aux: Rev3AuxData {
                 flags: 0x01, // FC short flag set
                 ..Default::default()
@@ -298,10 +338,17 @@ mod tests {
         };
         let anomalies = detect_anomalies(&sample, &config);
         // Should detect BOTH the overcurrent (20A > 15A) AND the FC short
-        let has_overcurrent = anomalies.iter().any(|a| a.kind == AnomalyKind::BattOvercurrent);
+        let has_overcurrent = anomalies
+            .iter()
+            .any(|a| a.kind == AnomalyKind::BattOvercurrent);
         let has_fc_short = anomalies.iter().any(|a| a.kind == AnomalyKind::FcShort);
-        assert!(has_overcurrent, "Overcurrent should be detected when has_channel_data is true");
-        assert!(has_fc_short, "FC short must be detected even when has_channel_data is also true");
+        assert!(
+            has_overcurrent,
+            "Overcurrent should be detected when has_channel_data is true"
+        );
+        assert!(
+            has_fc_short,
+            "FC short must be detected even when has_channel_data is also true"
+        );
     }
 }
-

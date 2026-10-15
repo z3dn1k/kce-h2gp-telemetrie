@@ -7,10 +7,10 @@
 //! - **Side Panel**: Bounded live anomaly log for rapid pit-crew situational awareness.
 //! - **Bottom Panels**: Running averages, power-mix indicator, cooling fan controls, and raw packet diagnostics.
 
+use crate::serial;
+use crate::TelemetryApp;
 use eframe::egui;
 use serde_json::json;
-use crate::TelemetryApp;
-use crate::serial;
 
 /// Selectable measurement channels displayed on the real-time history plot.
 #[derive(PartialEq, Clone, Copy)]
@@ -58,26 +58,55 @@ impl std::fmt::Display for FanMode {
 }
 
 // Helper to render large, clean metric blocks
-fn render_metric(ui: &mut egui::Ui, title: &str, val_str: &str, unit: &str, sub_text: &str, sub_text_2: &str, title_color: egui::Color32) {
+fn render_metric(
+    ui: &mut egui::Ui,
+    title: &str,
+    val_str: &str,
+    unit: &str,
+    sub_text: &str,
+    sub_text_2: &str,
+    title_color: egui::Color32,
+) {
     ui.vertical(|ui| {
         ui.add_space(2.0);
-        ui.label(egui::RichText::new(title).color(title_color).size(10.0).strong());
-        
+        ui.label(
+            egui::RichText::new(title)
+                .color(title_color)
+                .size(10.0)
+                .strong(),
+        );
+
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(val_str).color(egui::Color32::WHITE).size(42.0));
-            ui.label(egui::RichText::new(unit).color(egui::Color32::from_gray(100)).size(16.0));
+            ui.label(
+                egui::RichText::new(val_str)
+                    .color(egui::Color32::WHITE)
+                    .size(42.0),
+            );
+            ui.label(
+                egui::RichText::new(unit)
+                    .color(egui::Color32::from_gray(100))
+                    .size(16.0),
+            );
         });
-        
+
         if !sub_text.is_empty() {
-            ui.label(egui::RichText::new(sub_text).color(egui::Color32::from_gray(70)).size(10.0));
+            ui.label(
+                egui::RichText::new(sub_text)
+                    .color(egui::Color32::from_gray(70))
+                    .size(10.0),
+            );
         } else {
-            ui.label(egui::RichText::new(" ").size(10.0)); 
+            ui.label(egui::RichText::new(" ").size(10.0));
         }
-        
+
         if !sub_text_2.is_empty() {
-            ui.label(egui::RichText::new(sub_text_2).color(egui::Color32::from_gray(70)).size(10.0));
+            ui.label(
+                egui::RichText::new(sub_text_2)
+                    .color(egui::Color32::from_gray(70))
+                    .size(10.0),
+            );
         } else {
-            ui.label(egui::RichText::new(" ").size(10.0)); 
+            ui.label(egui::RichText::new(" ").size(10.0));
         }
         ui.add_space(6.0);
     });
@@ -86,8 +115,17 @@ fn render_metric(ui: &mut egui::Ui, title: &str, val_str: &str, unit: &str, sub_
 // Helper for the small footer stats
 fn render_mini_stat(ui: &mut egui::Ui, title: &str, val_str: String) {
     ui.vertical(|ui| {
-        ui.label(egui::RichText::new(title).color(egui::Color32::from_gray(90)).size(9.0));
-        ui.label(egui::RichText::new(val_str).color(egui::Color32::LIGHT_GRAY).size(14.0).strong());
+        ui.label(
+            egui::RichText::new(title)
+                .color(egui::Color32::from_gray(90))
+                .size(9.0),
+        );
+        ui.label(
+            egui::RichText::new(val_str)
+                .color(egui::Color32::LIGHT_GRAY)
+                .size(14.0)
+                .strong(),
+        );
     });
 }
 
@@ -108,7 +146,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("H2Gp KCE").color(egui::Color32::WHITE).size(14.0).strong());
             ui.add_space(15.0);
-            
+
             ui.label(egui::RichText::new("PORT:").color(egui::Color32::from_gray(100)).size(10.0));
             if !app.available_ports.is_empty() {
                 egui::ComboBox::from_id_salt("port_combo")
@@ -146,7 +184,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             if app.is_paused {
                 if ui.button(egui::RichText::new("▶ RESUME (Space)").color(egui::Color32::from_rgb(255, 215, 0)))
                     .on_hover_text("Obnovit aktualizaci grafu [Mezerník]")
-                    .clicked() 
+                    .clicked()
                 {
                     app.toggle_pause();
                 }
@@ -187,14 +225,14 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                 ui.add_space(10.0);
                 ui.label(egui::RichText::new(msg).color(egui::Color32::from_rgb(0, 210, 255)).strong().size(11.0));
             }
-            
+
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(egui::RichText::new("[1-4 Grafy | Space Pauza | R Recenter | P Report | C Spojení | D Demo]").color(egui::Color32::from_gray(80)).size(10.0));
             });
         });
     });
 
-   // 2. Diagnostics & Raw Data Footer (Absolute Bottom)
+    // 2. Diagnostics & Raw Data Footer (Absolute Bottom)
     if app.show_diagnostics {
         egui::TopBottomPanel::bottom("diagnostics").frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(5, 5, 5)).inner_margin(6.0)).show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -223,95 +261,153 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
     }
 
     // 3. Control Panel Footer
-    egui::TopBottomPanel::bottom("controls").frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(12, 12, 12)).inner_margin(8.0)).show(ctx, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("FAN").color(egui::Color32::from_gray(100)).size(10.0));
-            egui::ComboBox::from_id_salt("fan_cb").selected_text(app.fan_mode.to_string()).show_ui(ui, |ui| {
-                ui.selectable_value(&mut app.fan_mode, FanMode::Auto, "AUTO");
-                ui.selectable_value(&mut app.fan_mode, FanMode::Manual, "MANUAL");
-                ui.selectable_value(&mut app.fan_mode, FanMode::Off, "OFF");
-            });
-
-            ui.add(egui::Slider::new(&mut app.fan_duty, 0..=100).suffix("%"));
-            if ui.button("SEND").clicked() {
-                if let Some(tx) = &app.cmd_tx {
-                    let cmd = match app.fan_mode {
-                        FanMode::Manual => json!({
-                            "cmd": "fan",
-                            "mode": "manual",
-                            "duty": app.fan_duty
-                        }).to_string(),
-                        mode => json!({
-                            "cmd": "fan",
-                            "mode": mode.as_str()
-                        }).to_string(),
-                    };
-                    let _ = tx.send(cmd);
-                }
-            }
-
-            ui.add_space(20.0);
-            ui.label(egui::RichText::new("SIGN").color(egui::Color32::from_gray(100)).size(10.0));
-            ui.add(egui::TextEdit::singleline(&mut app.driver_code).char_limit(3).desired_width(40.0));
-            if ui.button("SEND").clicked() {
-                if let Some(tx) = &app.cmd_tx {
-                    let _ = tx.send(json!({
-                        "cmd": "sign",
-                        "driver": app.driver_code.to_uppercase()
-                    }).to_string());
-                }
-            }
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.toggle_value(&mut app.show_diagnostics, "DIAGNOSTICS");
-            });
-        });
-    });
-
-    // 4. Mini Stats Row (Bottom)
-    egui::TopBottomPanel::bottom("stats_row").frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(18, 18, 18)).inner_margin(12.0)).show(ctx, |ui| {
-        if let Some(sample) = &app.latest_sample {
+    egui::TopBottomPanel::bottom("controls")
+        .frame(
+            egui::Frame::NONE
+                .fill(egui::Color32::from_rgb(12, 12, 12))
+                .inner_margin(8.0),
+        )
+        .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                let batt_v_avg = app.data_manager.compute_batt_voltage_avg(app.config.sma_window);
-                let batt_i_avg = app.data_manager.compute_batt_current_avg(app.config.sma_window);
-                let fc_v_avg = app.data_manager.compute_fc_voltage_avg(app.config.sma_window);
-                let fc_i_avg = app.data_manager.compute_fc_current_avg(app.config.sma_window);
+                ui.label(
+                    egui::RichText::new("FAN")
+                        .color(egui::Color32::from_gray(100))
+                        .size(10.0),
+                );
+                egui::ComboBox::from_id_salt("fan_cb")
+                    .selected_text(app.fan_mode.to_string())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut app.fan_mode, FanMode::Auto, "AUTO");
+                        ui.selectable_value(&mut app.fan_mode, FanMode::Manual, "MANUAL");
+                        ui.selectable_value(&mut app.fan_mode, FanMode::Off, "OFF");
+                    });
 
-                render_mini_stat(ui, "FC AVG V", format!("{:.2} V", fc_v_avg));
-                ui.add_space(30.0);
-                render_mini_stat(ui, "FC AVG I", format!("{:.2} A", fc_i_avg));
-                ui.add_space(30.0);
-                render_mini_stat(ui, "BATT AVG V", format!("{:.2} V", batt_v_avg));
-                ui.add_space(30.0);
-                render_mini_stat(ui, "BATT AVG I", format!("{:.2} A", batt_i_avg));
-                ui.add_space(30.0);
-                render_mini_stat(ui, "FC TOTAL E", format!("{:.1} J", sample.fc.e));
-                ui.add_space(30.0);
-                render_mini_stat(ui, "BATT TOTAL E", format!("{:.1} J", sample.batt.e));
+                ui.add(egui::Slider::new(&mut app.fan_duty, 0..=100).suffix("%"));
+                if ui.button("SEND").clicked() {
+                    if let Some(tx) = &app.cmd_tx {
+                        let cmd = match app.fan_mode {
+                            FanMode::Manual => json!({
+                                "cmd": "fan",
+                                "mode": "manual",
+                                "duty": app.fan_duty
+                            })
+                            .to_string(),
+                            mode => json!({
+                                "cmd": "fan",
+                                "mode": mode.as_str()
+                            })
+                            .to_string(),
+                        };
+                        let _ = tx.send(cmd);
+                    }
+                }
+
+                ui.add_space(20.0);
+                ui.label(
+                    egui::RichText::new("SIGN")
+                        .color(egui::Color32::from_gray(100))
+                        .size(10.0),
+                );
+                ui.add(
+                    egui::TextEdit::singleline(&mut app.driver_code)
+                        .char_limit(3)
+                        .desired_width(40.0),
+                );
+                if ui.button("SEND").clicked() {
+                    if let Some(tx) = &app.cmd_tx {
+                        let _ = tx.send(
+                            json!({
+                                "cmd": "sign",
+                                "driver": app.driver_code.to_uppercase()
+                            })
+                            .to_string(),
+                        );
+                    }
+                }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let total_p = sample.batt.p + sample.fc.p;
-                    let fc_ratio = if total_p > 0.0 { (sample.fc.p / total_p).clamp(0.0, 1.0) } else { 0.0 };
-                    
-                    let progress = egui::ProgressBar::new(fc_ratio as f32)
-                        .text(format!("{:.1}W", sample.batt.p))
-                        .fill(egui::Color32::from_rgb(50, 100, 150))
-                        .desired_width(200.0);
-                    ui.add(progress);
-                    ui.label(egui::RichText::new("POWER MIX (SIGNED)").color(egui::Color32::from_gray(80)).size(10.0));
+                    ui.toggle_value(&mut app.show_diagnostics, "DIAGNOSTICS");
                 });
             });
-        } else {
-            ui.label(egui::RichText::new("Awaiting data...").color(egui::Color32::from_gray(100)));
-        }
-    });
+        });
+
+    // 4. Mini Stats Row (Bottom)
+    egui::TopBottomPanel::bottom("stats_row")
+        .frame(
+            egui::Frame::NONE
+                .fill(egui::Color32::from_rgb(18, 18, 18))
+                .inner_margin(12.0),
+        )
+        .show(ctx, |ui| {
+            if let Some(sample) = &app.latest_sample {
+                ui.horizontal(|ui| {
+                    let batt_v_avg = app
+                        .data_manager
+                        .compute_batt_voltage_avg(app.config.sma_window);
+                    let batt_i_avg = app
+                        .data_manager
+                        .compute_batt_current_avg(app.config.sma_window);
+                    let fc_v_avg = app
+                        .data_manager
+                        .compute_fc_voltage_avg(app.config.sma_window);
+                    let fc_i_avg = app
+                        .data_manager
+                        .compute_fc_current_avg(app.config.sma_window);
+
+                    render_mini_stat(ui, "FC AVG V", format!("{:.2} V", fc_v_avg));
+                    ui.add_space(30.0);
+                    render_mini_stat(ui, "FC AVG I", format!("{:.2} A", fc_i_avg));
+                    ui.add_space(30.0);
+                    render_mini_stat(ui, "BATT AVG V", format!("{:.2} V", batt_v_avg));
+                    ui.add_space(30.0);
+                    render_mini_stat(ui, "BATT AVG I", format!("{:.2} A", batt_i_avg));
+                    ui.add_space(30.0);
+                    render_mini_stat(ui, "FC TOTAL E", format!("{:.1} J", sample.fc.e));
+                    ui.add_space(30.0);
+                    render_mini_stat(ui, "BATT TOTAL E", format!("{:.1} J", sample.batt.e));
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let total_p = sample.batt.p + sample.fc.p;
+                        let fc_ratio = if total_p > 0.0 {
+                            (sample.fc.p / total_p).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
+
+                        let progress = egui::ProgressBar::new(fc_ratio as f32)
+                            .text(format!("{:.1}W", sample.batt.p))
+                            .fill(egui::Color32::from_rgb(50, 100, 150))
+                            .desired_width(200.0);
+                        ui.add(progress);
+                        ui.label(
+                            egui::RichText::new("POWER MIX (SIGNED)")
+                                .color(egui::Color32::from_gray(80))
+                                .size(10.0),
+                        );
+                    });
+                });
+            } else {
+                ui.label(
+                    egui::RichText::new("Awaiting data...").color(egui::Color32::from_gray(100)),
+                );
+            }
+        });
 
     // Live Anomaly Side Panel
     egui::SidePanel::right("anomaly_panel")
-        .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(15, 15, 15)).inner_margin(12.0))
+        .frame(
+            egui::Frame::NONE
+                .fill(egui::Color32::from_rgb(15, 15, 15))
+                .inner_margin(12.0),
+        )
         .exact_width(240.0)
         .show(ctx, |ui| {
-            ui.label(egui::RichText::new("STAV SYSTÉMU").color(egui::Color32::from_gray(140)).size(10.0).strong());
+            ui.label(
+                egui::RichText::new("STAV SYSTÉMU")
+                    .color(egui::Color32::from_gray(140))
+                    .size(10.0)
+                    .strong(),
+            );
             ui.add_space(4.0);
 
             // Overarching real-time vehicle health badge
@@ -324,8 +420,17 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.vertical(|ui| {
-                        ui.label(egui::RichText::new(status_title).color(text_color).strong().size(12.0));
-                        ui.label(egui::RichText::new(status_desc).color(egui::Color32::from_gray(180)).size(10.0));
+                        ui.label(
+                            egui::RichText::new(status_title)
+                                .color(text_color)
+                                .strong()
+                                .size(12.0),
+                        );
+                        ui.label(
+                            egui::RichText::new(status_desc)
+                                .color(egui::Color32::from_gray(180))
+                                .size(10.0),
+                        );
                     });
                 });
 
@@ -333,22 +438,42 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             ui.separator();
             ui.add_space(8.0);
 
-            ui.label(egui::RichText::new("HISTORIE ANOMÁLIÍ").color(egui::Color32::from_gray(140)).size(10.0).strong());
+            ui.label(
+                egui::RichText::new("HISTORIE ANOMÁLIÍ")
+                    .color(egui::Color32::from_gray(140))
+                    .size(10.0)
+                    .strong(),
+            );
             ui.add_space(6.0);
 
             if app.recent_anomalies.is_empty() {
-                ui.label(egui::RichText::new("Žádné zaznamenané anomálie.").color(egui::Color32::from_gray(100)).size(11.0));
+                ui.label(
+                    egui::RichText::new("Žádné zaznamenané anomálie.")
+                        .color(egui::Color32::from_gray(100))
+                        .size(11.0),
+                );
             } else {
-                egui::ScrollArea::vertical().stick_to_bottom(true).show(ui, |ui| {
-                    for anom in &app.recent_anomalies {
-                        let color = match anom.severity {
-                            crate::anomaly::AnomalySeverity::Critical => egui::Color32::from_rgb(255, 75, 75),
-                            crate::anomaly::AnomalySeverity::Warning => egui::Color32::from_rgb(255, 205, 50),
-                        };
-                        ui.label(egui::RichText::new(&anom.ui_text).color(color).monospace().size(11.0));
-                        ui.add_space(4.0);
-                    }
-                });
+                egui::ScrollArea::vertical()
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        for anom in &app.recent_anomalies {
+                            let color = match anom.severity {
+                                crate::anomaly::AnomalySeverity::Critical => {
+                                    egui::Color32::from_rgb(255, 75, 75)
+                                }
+                                crate::anomaly::AnomalySeverity::Warning => {
+                                    egui::Color32::from_rgb(255, 205, 50)
+                                }
+                            };
+                            ui.label(
+                                egui::RichText::new(&anom.ui_text)
+                                    .color(color)
+                                    .monospace()
+                                    .size(11.0),
+                            );
+                            ui.add_space(4.0);
+                        }
+                    });
             }
         });
 
@@ -356,7 +481,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(10, 10, 10)).inner_margin(12.0)).show(ctx, |ui| {
         if let Some(sample) = &app.latest_sample {
             let bg_frame = egui::Frame::NONE.fill(egui::Color32::from_rgb(15, 15, 15)).corner_radius(4.0).inner_margin(12.0);
-            
+
             bg_frame.show(ui, |ui| {
                 let total_width = ui.available_width();
                 let col_width = (total_width - 30.0) / 2.0;
@@ -371,8 +496,8 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                             ui.label(egui::RichText::new("●").color(batt_color));
                             ui.label(egui::RichText::new("BATT / CBANK").color(egui::Color32::WHITE).size(16.0).strong());
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let (state, color) = if sample.batt.i > 0.5 { ("VYBIJENI", egui::Color32::from_rgb(220, 180, 50)) } 
-                                else if sample.batt.i < -0.2 { ("NABIJENI", egui::Color32::from_rgb(80, 200, 120)) } 
+                                let (state, color) = if sample.batt.i > 0.5 { ("VYBIJENI", egui::Color32::from_rgb(220, 180, 50)) }
+                                else if sample.batt.i < -0.2 { ("NABIJENI", egui::Color32::from_rgb(80, 200, 120)) }
                                 else { ("IDLE", egui::Color32::from_gray(100)) };
                                 ui.label(egui::RichText::new(format!("● {}", state)).color(color).size(11.0).strong());
                             });
@@ -398,7 +523,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
 
                     // CUSTOM DUAL-COLORED SEPARATOR
                     let (line_rect, _) = ui.allocate_exact_size(egui::vec2(8.0, batt_resp.rect.height()), egui::Sense::hover());
-                    
+
                     ui.painter().rect_filled(
                         egui::Rect::from_min_size(egui::pos2(line_rect.min.x + 1.0, line_rect.min.y), egui::vec2(2.0, line_rect.height())),
                         0.0,
@@ -419,7 +544,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                                 let mut state = "IDLE";
                                 let mut color = egui::Color32::from_gray(100);
                                 if let Some(aux) = &app.latest_aux {
-                                    if (aux.flags & 0x01) != 0 { state = "SHORT (ZKRACOVANI)"; color = fc_color; } 
+                                    if (aux.flags & 0x01) != 0 { state = "SHORT (ZKRACOVANI)"; color = fc_color; }
                                     else if (aux.flags & 0x02) != 0 { state = "PURGE (ODVOD)"; color = egui::Color32::from_rgb(80, 180, 220); }
                                 }
                                 ui.label(egui::RichText::new(format!("● {}", state)).color(color).size(11.0).strong());
@@ -456,7 +581,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                     ui.add_space(30.0);
                     ui.label(egui::RichText::new("TEMP CIDLO 2").color(egui::Color32::from_rgb(100, 180, 160)).size(10.0).strong());
                     ui.label(egui::RichText::new(format!("{:.1} C", aux.temperature_c[1])).color(egui::Color32::LIGHT_GRAY).size(12.0));
-                    
+
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(egui::RichText::new(format!("{:.1} C", aux.max_temperature_c)).color(egui::Color32::LIGHT_GRAY).size(12.0));
                         ui.label(egui::RichText::new("MAX TEMP").color(egui::Color32::from_gray(90)).size(10.0));
@@ -565,7 +690,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             for i in start_idx..times.len() {
                 let t = times[i];
                 let s = &history[i];
-                
+
                 let (b_val, f_val) = match app.chart_tab {
                     ChartTab::Voltage => (s.batt.v, s.fc.v),
                     ChartTab::Current => (s.batt.i, s.fc.i),
@@ -586,7 +711,7 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
             let mut plot = egui_plot::Plot::new("history_plot")
                 .height(ui.available_height())
                 .show_background(false)
-                .show_axes([false, true]) 
+                .show_axes([false, true])
                 .legend(egui_plot::Legend::default())
                 .allow_zoom(true)
                 .allow_drag(true)
@@ -623,13 +748,13 @@ pub fn render_dashboard(app: &mut TelemetryApp, ctx: &egui::Context) {
                     egui_plot::Line::new(egui_plot::PlotPoints::new(batt_points))
                         .name(format!("BATT {}", y_axis_label))
                         .width(2.0_f32)
-                        .color(egui::Color32::from_rgb(60, 180, 220)) 
+                        .color(egui::Color32::from_rgb(60, 180, 220))
                 );
                 plot_ui.line(
                     egui_plot::Line::new(egui_plot::PlotPoints::new(fc_points))
                         .name(format!("FC {}", y_axis_label))
                         .width(2.0_f32)
-                        .color(egui::Color32::from_rgb(220, 60, 60)) 
+                        .color(egui::Color32::from_rgb(220, 60, 60))
                 );
             });
         } else {
@@ -663,15 +788,33 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
             if let Some(report) = &app.active_report {
                 // Header info
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("H2GP RC Speciál").color(egui::Color32::from_rgb(0, 210, 255)).strong().size(13.0));
+                    ui.label(
+                        egui::RichText::new("H2GP RC Speciál")
+                            .color(egui::Color32::from_rgb(0, 210, 255))
+                            .strong()
+                            .size(13.0),
+                    );
                     ui.separator();
-                    ui.label(egui::RichText::new(format!("Pilot: {}", app.driver_code)).color(egui::Color32::WHITE).strong());
+                    ui.label(
+                        egui::RichText::new(format!("Pilot: {}", app.driver_code))
+                            .color(egui::Color32::WHITE)
+                            .strong(),
+                    );
                     ui.separator();
                     let m = (report.duration_s as u32) / 60;
                     let s = report.duration_s % 60.0;
-                    ui.label(egui::RichText::new(format!("Doba stintu: {:02}:{:04.1}", m, s)).color(egui::Color32::from_gray(200)));
+                    ui.label(
+                        egui::RichText::new(format!("Doba stintu: {:02}:{:04.1}", m, s))
+                            .color(egui::Color32::from_gray(200)),
+                    );
                     ui.separator();
-                    ui.label(egui::RichText::new(format!("{} vzorků ({:.1} PPS)", report.total_samples, report.avg_pps)).color(egui::Color32::from_gray(180)));
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} vzorků ({:.1} PPS)",
+                            report.total_samples, report.avg_pps
+                        ))
+                        .color(egui::Color32::from_gray(180)),
+                    );
                 });
 
                 ui.add_space(8.0);
@@ -683,49 +826,135 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
                     // Column 1
                     cols[0].group(|ui| {
                         ui.set_width(ui.available_width());
-                        ui.label(egui::RichText::new("HYBRIDNÍ ENERGETICKÁ BILANCE").color(egui::Color32::from_rgb(0, 230, 118)).size(11.0).strong());
+                        ui.label(
+                            egui::RichText::new("HYBRIDNÍ ENERGETICKÁ BILANCE")
+                                .color(egui::Color32::from_rgb(0, 230, 118))
+                                .size(11.0)
+                                .strong(),
+                        );
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(format!("{:.1} %", report.fc_energy_ratio_pct)).color(egui::Color32::from_rgb(0, 230, 118)).size(22.0).strong());
-                            ui.label(egui::RichText::new("podíl palivového článku").color(egui::Color32::from_gray(160)).size(11.0));
+                            ui.label(
+                                egui::RichText::new(format!("{:.1} %", report.fc_energy_ratio_pct))
+                                    .color(egui::Color32::from_rgb(0, 230, 118))
+                                    .size(22.0)
+                                    .strong(),
+                            );
+                            ui.label(
+                                egui::RichText::new("podíl palivového článku")
+                                    .color(egui::Color32::from_gray(160))
+                                    .size(11.0),
+                            );
                         });
-                        ui.label(egui::RichText::new(format!("• Energie FC: {:.1} J | Baterie: {:.1} J", report.fc_energy_j, report.batt_energy_j)).color(egui::Color32::from_gray(180)).size(11.0));
-                        ui.label(egui::RichText::new(format!("• Celková spotřeba: {:.1} J (prům. {:.1} W)", report.total_energy_j, report.avg_total_power_w)).color(egui::Color32::from_gray(180)).size(11.0));
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "• Energie FC: {:.1} J | Baterie: {:.1} J",
+                                report.fc_energy_j, report.batt_energy_j
+                            ))
+                            .color(egui::Color32::from_gray(180))
+                            .size(11.0),
+                        );
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "• Celková spotřeba: {:.1} J (prům. {:.1} W)",
+                                report.total_energy_j, report.avg_total_power_w
+                            ))
+                            .color(egui::Color32::from_gray(180))
+                            .size(11.0),
+                        );
                     });
 
                     cols[0].add_space(8.0);
 
                     cols[0].group(|ui| {
                         ui.set_width(ui.available_width());
-                        ui.label(egui::RichText::new("SKLIZEŇ REKUPERACE BRZDĚNÍM").color(egui::Color32::from_rgb(0, 210, 255)).size(11.0).strong());
+                        ui.label(
+                            egui::RichText::new("SKLIZEŇ REKUPERACE BRZDĚNÍM")
+                                .color(egui::Color32::from_rgb(0, 210, 255))
+                                .size(11.0)
+                                .strong(),
+                        );
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(format!("+{:.1} J", report.regen_energy_j)).color(egui::Color32::from_rgb(0, 210, 255)).size(22.0).strong());
-                            ui.label(egui::RichText::new(format!("(+{:.4} Ah)", report.regen_ah)).color(egui::Color32::from_gray(160)).size(11.0));
+                            ui.label(
+                                egui::RichText::new(format!("+{:.1} J", report.regen_energy_j))
+                                    .color(egui::Color32::from_rgb(0, 210, 255))
+                                    .size(22.0)
+                                    .strong(),
+                            );
+                            ui.label(
+                                egui::RichText::new(format!("(+{:.4} Ah)", report.regen_ah))
+                                    .color(egui::Color32::from_gray(160))
+                                    .size(11.0),
+                            );
                         });
-                        ui.label(egui::RichText::new(format!("• Špičkový brzdný proud: {:.2} A", report.peak_regen_current_a)).color(egui::Color32::from_gray(180)).size(11.0));
-                        ui.label(egui::RichText::new("• Úspora energie generátorem před zatáčkami").color(egui::Color32::from_gray(140)).size(10.0));
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "• Špičkový brzdný proud: {:.2} A",
+                                report.peak_regen_current_a
+                            ))
+                            .color(egui::Color32::from_gray(180))
+                            .size(11.0),
+                        );
+                        ui.label(
+                            egui::RichText::new("• Úspora energie generátorem před zatáčkami")
+                                .color(egui::Color32::from_gray(140))
+                                .size(10.0),
+                        );
                     });
 
                     // Column 2
                     cols[1].group(|ui| {
                         ui.set_width(ui.available_width());
-                        ui.label(egui::RichText::new("PROUDOVÉ A VÝKONOVÉ EXTRÉMY").color(egui::Color32::from_rgb(255, 215, 0)).size(11.0).strong());
+                        ui.label(
+                            egui::RichText::new("PROUDOVÉ A VÝKONOVÉ EXTRÉMY")
+                                .color(egui::Color32::from_rgb(255, 215, 0))
+                                .size(11.0)
+                                .strong(),
+                        );
                         ui.add_space(4.0);
                         let p_max = report.peak_batt_power_w.max(report.peak_fc_power_w);
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(format!("{:.1} W", p_max)).color(egui::Color32::WHITE).size(22.0).strong());
-                            ui.label(egui::RichText::new("špičkový příkon (P_max)").color(egui::Color32::from_gray(160)).size(11.0));
+                            ui.label(
+                                egui::RichText::new(format!("{:.1} W", p_max))
+                                    .color(egui::Color32::WHITE)
+                                    .size(22.0)
+                                    .strong(),
+                            );
+                            ui.label(
+                                egui::RichText::new("špičkový příkon (P_max)")
+                                    .color(egui::Color32::from_gray(160))
+                                    .size(11.0),
+                            );
                         });
-                        ui.label(egui::RichText::new(format!("• Max. proud: Batt {:.2} A | FC {:.2} A", report.peak_batt_current_a, report.peak_fc_current_a)).color(egui::Color32::from_gray(180)).size(11.0));
-                        ui.label(egui::RichText::new(format!("• Min. napětí FC pod zátěží: {:.2} V", report.min_fc_voltage_v)).color(egui::Color32::from_gray(180)).size(11.0));
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "• Max. proud: Batt {:.2} A | FC {:.2} A",
+                                report.peak_batt_current_a, report.peak_fc_current_a
+                            ))
+                            .color(egui::Color32::from_gray(180))
+                            .size(11.0),
+                        );
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "• Min. napětí FC pod zátěží: {:.2} V",
+                                report.min_fc_voltage_v
+                            ))
+                            .color(egui::Color32::from_gray(180))
+                            .size(11.0),
+                        );
                     });
 
                     cols[1].add_space(8.0);
 
                     cols[1].group(|ui| {
                         ui.set_width(ui.available_width());
-                        ui.label(egui::RichText::new("TEPLOTNÍ A BEZPEČNOSTNÍ STAV").color(egui::Color32::from_rgb(255, 140, 0)).size(11.0).strong());
+                        ui.label(
+                            egui::RichText::new("TEPLOTNÍ A BEZPEČNOSTNÍ STAV")
+                                .color(egui::Color32::from_rgb(255, 140, 0))
+                                .size(11.0)
+                                .strong(),
+                        );
                         ui.add_space(4.0);
                         let max_t = report.max_batt_temp_c.max(report.max_fc_temp_c);
                         let t_col = if max_t > 45.0 {
@@ -736,18 +965,41 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
                             egui::Color32::from_rgb(0, 230, 118)
                         };
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(format!("{:.1} °C", max_t)).color(t_col).size(22.0).strong());
-                            ui.label(egui::RichText::new("max. teplota článků").color(egui::Color32::from_gray(160)).size(11.0));
+                            ui.label(
+                                egui::RichText::new(format!("{:.1} °C", max_t))
+                                    .color(t_col)
+                                    .size(22.0)
+                                    .strong(),
+                            );
+                            ui.label(
+                                egui::RichText::new("max. teplota článků")
+                                    .color(egui::Color32::from_gray(160))
+                                    .size(11.0),
+                            );
                         });
-                        ui.label(egui::RichText::new(format!("• Teploty: Batt Max {:.1} °C | FC Max {:.1} °C", report.max_batt_temp_c, report.max_fc_temp_c)).color(egui::Color32::from_gray(180)).size(11.0));
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "• Teploty: Batt Max {:.1} °C | FC Max {:.1} °C",
+                                report.max_batt_temp_c, report.max_fc_temp_c
+                            ))
+                            .color(egui::Color32::from_gray(180))
+                            .size(11.0),
+                        );
                         let incident_txt = if report.critical_count > 0 {
-                            format!("{} kritických | {} varování", report.critical_count, report.warning_count)
+                            format!(
+                                "{} kritických | {} varování",
+                                report.critical_count, report.warning_count
+                            )
                         } else if report.warning_count > 0 {
                             format!("{} varování", report.warning_count)
                         } else {
                             "0 anomálií — čistá jízda".to_string()
                         };
-                        ui.label(egui::RichText::new(format!("• Incidenty: {}", incident_txt)).color(egui::Color32::from_gray(180)).size(11.0));
+                        ui.label(
+                            egui::RichText::new(format!("• Incidenty: {}", incident_txt))
+                                .color(egui::Color32::from_gray(180))
+                                .size(11.0),
+                        );
                     });
                 });
 
@@ -756,30 +1008,61 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
                 ui.add_space(6.0);
 
                 // Incident List (Scrollable)
-                ui.label(egui::RichText::new(format!("PŘEHLED BEZPEČNOSTNÍCH INCIDENTŮ ({})", report.incidents.len())).color(egui::Color32::from_gray(140)).size(11.0).strong());
+                ui.label(
+                    egui::RichText::new(format!(
+                        "PŘEHLED BEZPEČNOSTNÍCH INCIDENTŮ ({})",
+                        report.incidents.len()
+                    ))
+                    .color(egui::Color32::from_gray(140))
+                    .size(11.0)
+                    .strong(),
+                );
                 ui.add_space(4.0);
 
-                egui::ScrollArea::vertical().max_height(130.0).show(ui, |ui| {
-                    if report.incidents.is_empty() {
-                        ui.label(egui::RichText::new("Během stintu nebyly detekovány žádné anomálie.").color(egui::Color32::from_rgb(0, 230, 118)).size(12.0));
-                    } else {
-                        for inc in &report.incidents {
-                            let time_s = f64::from(inc.timestamp_ms) / 1000.0;
-                            let m = (time_s as u32) / 60;
-                            let s = time_s % 60.0;
-                            let (color, tag) = match inc.severity {
-                                crate::anomaly::AnomalySeverity::Critical => (egui::Color32::from_rgb(255, 60, 60), "[CRIT]"),
-                                crate::anomaly::AnomalySeverity::Warning => (egui::Color32::from_rgb(255, 220, 0), "[WARN]"),
-                            };
+                egui::ScrollArea::vertical()
+                    .max_height(130.0)
+                    .show(ui, |ui| {
+                        if report.incidents.is_empty() {
+                            ui.label(
+                                egui::RichText::new(
+                                    "Během stintu nebyly detekovány žádné anomálie.",
+                                )
+                                .color(egui::Color32::from_rgb(0, 230, 118))
+                                .size(12.0),
+                            );
+                        } else {
+                            for inc in &report.incidents {
+                                let time_s = f64::from(inc.timestamp_ms) / 1000.0;
+                                let m = (time_s as u32) / 60;
+                                let s = time_s % 60.0;
+                                let (color, tag) = match inc.severity {
+                                    crate::anomaly::AnomalySeverity::Critical => {
+                                        (egui::Color32::from_rgb(255, 60, 60), "[CRIT]")
+                                    }
+                                    crate::anomaly::AnomalySeverity::Warning => {
+                                        (egui::Color32::from_rgb(255, 220, 0), "[WARN]")
+                                    }
+                                };
 
-                            ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new(format!("[{:02}:{:04.1}]", m, s)).color(egui::Color32::from_gray(120)).monospace().size(11.0));
-                                ui.label(egui::RichText::new(tag).color(color).strong().size(11.0));
-                                ui.label(egui::RichText::new(&inc.description).color(color).size(11.0));
-                            });
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        egui::RichText::new(format!("[{:02}:{:04.1}]", m, s))
+                                            .color(egui::Color32::from_gray(120))
+                                            .monospace()
+                                            .size(11.0),
+                                    );
+                                    ui.label(
+                                        egui::RichText::new(tag).color(color).strong().size(11.0),
+                                    );
+                                    ui.label(
+                                        egui::RichText::new(&inc.description)
+                                            .color(color)
+                                            .size(11.0),
+                                    );
+                                });
+                            }
                         }
-                    }
-                });
+                    });
 
                 ui.add_space(12.0);
                 ui.separator();
@@ -787,30 +1070,49 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
 
                 // Action Buttons at the bottom
                 ui.horizontal(|ui| {
-                    if ui.button("ULOŽIT HTML").on_hover_text("Uložit grafický HTML dashboard do složky reports/").clicked() {
+                    if ui
+                        .button("ULOŽIT HTML")
+                        .on_hover_text("Uložit grafický HTML dashboard do složky reports/")
+                        .clicked()
+                    {
                         let slug = crate::report::generate_timestamp_slug();
                         let (html_path, _) = crate::report::report_file_paths(&slug);
                         if let Err(e) = report.export_html(&app.driver_code, &html_path) {
                             export_action = Some(("error", format!("Chyba exportu: {}", e)));
                         } else {
-                            export_action = Some(("success", format!("Report uložen do {}", html_path.display())));
+                            export_action = Some((
+                                "success",
+                                format!("Report uložen do {}", html_path.display()),
+                            ));
                         }
                     }
 
-                    if ui.button("ULOŽIT MARKDOWN").on_hover_text("Uložit přehledný Markdown report do složky reports/").clicked() {
+                    if ui
+                        .button("ULOŽIT MARKDOWN")
+                        .on_hover_text("Uložit přehledný Markdown report do složky reports/")
+                        .clicked()
+                    {
                         let slug = crate::report::generate_timestamp_slug();
                         let (_, md_path) = crate::report::report_file_paths(&slug);
                         if let Err(e) = report.export_markdown(&app.driver_code, &md_path) {
                             export_action = Some(("error", format!("Chyba exportu: {}", e)));
                         } else {
-                            export_action = Some(("success", format!("Markdown uložen do {}", md_path.display())));
+                            export_action = Some((
+                                "success",
+                                format!("Markdown uložen do {}", md_path.display()),
+                            ));
                         }
                     }
 
-                    if ui.button("KOPÍROVAT").on_hover_text("Zkopírovat textový souhrn do schránky").clicked() {
+                    if ui
+                        .button("KOPÍROVAT")
+                        .on_hover_text("Zkopírovat textový souhrn do schránky")
+                        .clicked()
+                    {
                         let clip = report.to_clipboard_text(&app.driver_code);
                         ctx.copy_text(clip);
-                        export_action = Some(("success", "Souhrn zkopírován do schránky".to_string()));
+                        export_action =
+                            Some(("success", "Souhrn zkopírován do schránky".to_string()));
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -831,10 +1133,16 @@ fn render_report_modal(app: &mut TelemetryApp, ctx: &egui::Context) {
     if let Some((kind, msg)) = export_action {
         if kind == "success" {
             println!("[report] {}", msg);
-            app.report_toast = Some((msg, std::time::Instant::now() + std::time::Duration::from_secs(4)));
+            app.report_toast = Some((
+                msg,
+                std::time::Instant::now() + std::time::Duration::from_secs(4),
+            ));
         } else {
             eprintln!("[report] {}", msg);
-            app.report_toast = Some((format!("Chyba: {}", msg), std::time::Instant::now() + std::time::Duration::from_secs(4)));
+            app.report_toast = Some((
+                format!("Chyba: {}", msg),
+                std::time::Instant::now() + std::time::Duration::from_secs(4),
+            ));
         }
     }
 

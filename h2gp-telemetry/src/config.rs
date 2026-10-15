@@ -4,8 +4,8 @@
 //! and communication settings. Enables parameter tuning without code recompilation
 //! via standard TOML configuration files (`config.toml`).
 
-use std::fs;
 use serde::{Deserialize, Serialize};
+use std::fs;
 
 /// Global configuration settings for the H2GP telemetry desktop application.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -132,7 +132,10 @@ impl AppConfig {
                 let mut default_cfg = Self::default();
                 if let Ok(serialized) = toml::to_string_pretty(&default_cfg) {
                     if let Err(err) = fs::write(path, serialized) {
-                        eprintln!("[config] Could not write default config to '{}': {}", path, err);
+                        eprintln!(
+                            "[config] Could not write default config to '{}': {}",
+                            path, err
+                        );
                     } else {
                         println!("[config] Created default configuration file at '{}'", path);
                     }
@@ -180,8 +183,10 @@ mod tests {
     #[test]
     fn toml_roundtrip_serialization() {
         let original = AppConfig::default();
-        let serialized = toml::to_string_pretty(&original).expect("TOML serialization should succeed");
-        let deserialized: AppConfig = toml::from_str(&serialized).expect("TOML deserialization should succeed");
+        let serialized =
+            toml::to_string_pretty(&original).expect("TOML serialization should succeed");
+        let deserialized: AppConfig =
+            toml::from_str(&serialized).expect("TOML deserialization should succeed");
         assert_eq!(original, deserialized);
     }
 
@@ -216,7 +221,10 @@ mod tests {
 
     #[test]
     fn test_validate_clamps_zero_buffer() {
-        let mut cfg = AppConfig { buffer_capacity: 0, ..Default::default() };
+        let mut cfg = AppConfig {
+            buffer_capacity: 0,
+            ..Default::default()
+        };
         cfg.validate();
         assert_eq!(cfg.buffer_capacity, 100);
     }
@@ -229,8 +237,9 @@ mod tests {
             ..Default::default()
         };
         cfg.validate();
-        assert!(cfg.anomaly_fc_vsag_v < cfg.anomaly_fc_warn_vsag_v,
-            "Critical voltage sag must be below warning level");
+        assert!(
+            cfg.anomaly_fc_vsag_v < cfg.anomaly_fc_warn_vsag_v,
+            "Critical voltage sag must be below warning level"
+        );
     }
 }
-

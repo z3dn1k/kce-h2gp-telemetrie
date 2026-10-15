@@ -1,6 +1,7 @@
 # H2GP Telemetry Dashboard
 
 [![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
+[![CI](https://github.com/z3dn1k/kce-h2gp-telemetrie/actions/workflows/ci.yml/badge.svg)](https://github.com/z3dn1k/kce-h2gp-telemetrie/actions/workflows/ci.yml)
 [![GUI](https://img.shields.io/badge/GUI-egui%200.31-blue.svg)](https://github.com/emilk/egui)
 [![Tests](https://img.shields.io/badge/tests-68%20passed-brightgreen.svg)]()
 [![Clippy](https://img.shields.io/badge/clippy-zero%20warnings-brightgreen.svg)]()

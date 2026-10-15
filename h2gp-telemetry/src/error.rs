@@ -31,14 +31,11 @@ pub enum TelemetryError {
     },
 
     #[error("Demo file '{path}' contains no data rows")]
-    DemoFileEmpty {
-        path: String,
-    },
+    DemoFileEmpty { path: String },
 
     // Note: Logger errors are intentionally not represented here.
     // Logging uses a fire-and-forget pattern (eprintln! on failure)
     // to ensure telemetry streaming is never interrupted by I/O glitches.
-
     #[error("Report export failed: {0}")]
     ReportExport(#[from] std::io::Error),
 }

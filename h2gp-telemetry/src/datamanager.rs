@@ -4,11 +4,11 @@
 //! backward time jump protection (preventing distorted charts across MCU resets),
 //! Simple Moving Averages (SMA) for noise attenuation, and post-race summary exports.
 
+use crate::error::TelemetryError;
+use crate::protocol::TelemetrySample;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Write;
-use std::collections::VecDeque;
-use crate::protocol::TelemetrySample;
-use crate::error::TelemetryError;
 
 /// O(1) running average calculator using a circular window buffer.
 #[derive(Debug, Clone)]
@@ -80,23 +80,39 @@ impl DataManager {
     /// and total packet count from recorded history.
     pub fn export_summary(&self) -> Result<(), TelemetryError> {
         let mut file = File::create("summary.txt")?;
-        
+
         // Safely extract the last sample without using .unwrap()
         if let Some(last_sample) = self.history.last() {
             let mut max_batt_t = -100.0f64;
             let mut max_fc_t = -100.0f64;
 
             for s in &self.history {
-                if s.batt.t > max_batt_t { max_batt_t = s.batt.t; }
-                if s.fc.t > max_fc_t { max_fc_t = s.fc.t; }
+                if s.batt.t > max_batt_t {
+                    max_batt_t = s.batt.t;
+                }
+                if s.fc.t > max_fc_t {
+                    max_fc_t = s.fc.t;
+                }
             }
 
             writeln!(file, "========================================")?;
             writeln!(file, "       H2GP POST-RACE ANALYTICS         ")?;
             writeln!(file, "========================================")?;
-            writeln!(file, "Total Battery Energy Used : {:.2} J", last_sample.batt.e)?;
-            writeln!(file, "Total Fuel Cell Energy    : {:.2} J", last_sample.fc.e)?;
-            writeln!(file, "Peak Battery Current      : {:.2} A", self.batt_i_mm.1)?;
+            writeln!(
+                file,
+                "Total Battery Energy Used : {:.2} J",
+                last_sample.batt.e
+            )?;
+            writeln!(
+                file,
+                "Total Fuel Cell Energy    : {:.2} J",
+                last_sample.fc.e
+            )?;
+            writeln!(
+                file,
+                "Peak Battery Current      : {:.2} A",
+                self.batt_i_mm.1
+            )?;
             writeln!(file, "Peak Fuel Cell Current    : {:.2} A", self.fc_i_mm.1)?;
             writeln!(file, "Max Battery Temp          : {:.1} °C", max_batt_t)?;
             writeln!(file, "Max Fuel Cell Temp        : {:.1} °C", max_fc_t)?;
@@ -114,8 +130,8 @@ impl DataManager {
     /// The buffer uses a batch size of `clamp(max_history / 10, 10, 500)` to amortize
     /// reallocation costs during circular draining.
     pub fn new(max_history: usize, sma_window: usize) -> Self {
-        let batch_size = (max_history / 10).clamp(10, 500); 
-        
+        let batch_size = (max_history / 10).clamp(10, 500);
+
         let mut dm = Self {
             max_history,
             batch_size,
@@ -163,7 +179,7 @@ impl DataManager {
     /// Running min/max values are updated in O(1) time.
     pub fn add_data(&mut self, sample: TelemetrySample) {
         let elapsed_seconds = sample.timestamp_ms as f64 / 1000.0;
-        
+
         // Detect backward time jumps (e.g., Demo Mode restarting or MCU hard reset)
         // This prevents the Z-fold graph spaghetti.
         if let Some(&last_time) = self.time_labels.last() {
@@ -171,14 +187,14 @@ impl DataManager {
                 self.clear();
             }
         }
-        
+
         self.batt_v_mm.0 = self.batt_v_mm.0.min(sample.batt.v);
         self.batt_v_mm.1 = self.batt_v_mm.1.max(sample.batt.v);
         self.batt_i_mm.0 = self.batt_i_mm.0.min(sample.batt.i);
         self.batt_i_mm.1 = self.batt_i_mm.1.max(sample.batt.i);
         self.batt_p_mm.0 = self.batt_p_mm.0.min(sample.batt.p);
         self.batt_p_mm.1 = self.batt_p_mm.1.max(sample.batt.p);
-        
+
         self.fc_v_mm.0 = self.fc_v_mm.0.min(sample.fc.v);
         self.fc_v_mm.1 = self.fc_v_mm.1.max(sample.fc.v);
         self.fc_i_mm.0 = self.fc_i_mm.0.min(sample.fc.i);
@@ -208,21 +224,33 @@ impl DataManager {
             return;
         }
 
-        let mut bv_min = f64::INFINITY; let mut bv_max = f64::NEG_INFINITY;
-        let mut bi_min = f64::INFINITY; let mut bi_max = f64::NEG_INFINITY;
-        let mut bp_min = f64::INFINITY; let mut bp_max = f64::NEG_INFINITY;
-        let mut fv_min = f64::INFINITY; let mut fv_max = f64::NEG_INFINITY;
-        let mut fi_min = f64::INFINITY; let mut fi_max = f64::NEG_INFINITY;
-        let mut fp_min = f64::INFINITY; let mut fp_max = f64::NEG_INFINITY;
+        let mut bv_min = f64::INFINITY;
+        let mut bv_max = f64::NEG_INFINITY;
+        let mut bi_min = f64::INFINITY;
+        let mut bi_max = f64::NEG_INFINITY;
+        let mut bp_min = f64::INFINITY;
+        let mut bp_max = f64::NEG_INFINITY;
+        let mut fv_min = f64::INFINITY;
+        let mut fv_max = f64::NEG_INFINITY;
+        let mut fi_min = f64::INFINITY;
+        let mut fi_max = f64::NEG_INFINITY;
+        let mut fp_min = f64::INFINITY;
+        let mut fp_max = f64::NEG_INFINITY;
 
         for s in &self.history {
-            bv_min = bv_min.min(s.batt.v); bv_max = bv_max.max(s.batt.v);
-            bi_min = bi_min.min(s.batt.i); bi_max = bi_max.max(s.batt.i);
-            bp_min = bp_min.min(s.batt.p); bp_max = bp_max.max(s.batt.p);
-            
-            fv_min = fv_min.min(s.fc.v); fv_max = fv_max.max(s.fc.v);
-            fi_min = fi_min.min(s.fc.i); fi_max = fi_max.max(s.fc.i);
-            fp_min = fp_min.min(s.fc.p); fp_max = fp_max.max(s.fc.p);
+            bv_min = bv_min.min(s.batt.v);
+            bv_max = bv_max.max(s.batt.v);
+            bi_min = bi_min.min(s.batt.i);
+            bi_max = bi_max.max(s.batt.i);
+            bp_min = bp_min.min(s.batt.p);
+            bp_max = bp_max.max(s.batt.p);
+
+            fv_min = fv_min.min(s.fc.v);
+            fv_max = fv_max.max(s.fc.v);
+            fi_min = fi_min.min(s.fc.i);
+            fi_max = fi_max.max(s.fc.i);
+            fp_min = fp_min.min(s.fc.p);
+            fp_max = fp_max.max(s.fc.p);
         }
 
         self.batt_v_mm = (bv_min, bv_max);
@@ -270,37 +298,49 @@ impl DataManager {
 
     /// Returns cached `(min, max)` battery voltage in Volts across active buffer history.
     pub fn batt_v_min_max(&self) -> (f64, f64) {
-        if self.history.is_empty() { return (0.0, 0.0); }
+        if self.history.is_empty() {
+            return (0.0, 0.0);
+        }
         self.batt_v_mm
     }
 
     /// Returns cached `(min, max)` battery current in Amperes across active buffer history.
     pub fn batt_i_min_max(&self) -> (f64, f64) {
-        if self.history.is_empty() { return (0.0, 0.0); }
+        if self.history.is_empty() {
+            return (0.0, 0.0);
+        }
         self.batt_i_mm
     }
 
     /// Returns cached `(min, max)` battery power in Watts across active buffer history.
     pub fn batt_p_min_max(&self) -> (f64, f64) {
-        if self.history.is_empty() { return (0.0, 0.0); }
+        if self.history.is_empty() {
+            return (0.0, 0.0);
+        }
         self.batt_p_mm
     }
 
     /// Returns cached `(min, max)` fuel cell voltage in Volts across active buffer history.
     pub fn fc_v_min_max(&self) -> (f64, f64) {
-        if self.history.is_empty() { return (0.0, 0.0); }
+        if self.history.is_empty() {
+            return (0.0, 0.0);
+        }
         self.fc_v_mm
     }
 
     /// Returns cached `(min, max)` fuel cell current in Amperes across active buffer history.
     pub fn fc_i_min_max(&self) -> (f64, f64) {
-        if self.history.is_empty() { return (0.0, 0.0); }
+        if self.history.is_empty() {
+            return (0.0, 0.0);
+        }
         self.fc_i_mm
     }
 
     /// Returns cached `(min, max)` fuel cell power in Watts across active buffer history.
     pub fn fc_p_min_max(&self) -> (f64, f64) {
-        if self.history.is_empty() { return (0.0, 0.0); }
+        if self.history.is_empty() {
+            return (0.0, 0.0);
+        }
         self.fc_p_mm
     }
 }
@@ -310,7 +350,13 @@ mod tests {
     use super::*;
     use crate::protocol::ChannelData;
 
-    fn make_test_sample(timestamp_ms: u32, batt_v: f64, batt_i: f64, fc_v: f64, fc_i: f64) -> TelemetrySample {
+    fn make_test_sample(
+        timestamp_ms: u32,
+        batt_v: f64,
+        batt_i: f64,
+        fc_v: f64,
+        fc_i: f64,
+    ) -> TelemetrySample {
         TelemetrySample {
             timestamp_ms,
             batt: ChannelData {

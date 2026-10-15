@@ -6,23 +6,23 @@
 
 mod anomaly;
 mod config;
-mod protocol;
-mod report;
-mod serial;
-mod logger;
 mod datamanager;
 mod demo;
 mod error;
+mod logger;
+mod protocol;
+mod report;
+mod serial;
 mod ui;
 
 use config::AppConfig;
 use eframe::egui;
 use protocol::TelemetrySample;
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
 use std::time::Instant;
-use std::collections::VecDeque;
 use ui::{ChartTab, FanMode};
 
 /// Current connection status of the telemetry feed.
@@ -41,26 +41,41 @@ pub enum ConnectionState {
 impl ConnectionState {
     /// Returns true if either live telemetry or demo simulation is active.
     pub fn is_connected(&self) -> bool {
-        matches!(self, ConnectionState::Live { .. } | ConnectionState::DemoMode { .. })
+        matches!(
+            self,
+            ConnectionState::Live { .. } | ConnectionState::DemoMode { .. }
+        )
     }
 
     /// Returns a human-readable badge label and theme color for the UI toolbar.
     pub fn status_text(&self) -> (String, egui::Color32) {
         match self {
-            ConnectionState::Disconnected => ("● DISCONNECTED".to_string(), egui::Color32::from_rgb(200, 60, 60)),
+            ConnectionState::Disconnected => (
+                "● DISCONNECTED".to_string(),
+                egui::Color32::from_rgb(200, 60, 60),
+            ),
             ConnectionState::Live { since } => {
                 let elapsed = since.elapsed().as_secs();
                 let m = elapsed / 60;
                 let s = elapsed % 60;
-                (format!("● LIVE [{:02}:{:02}]", m, s), egui::Color32::from_rgb(0, 220, 100))
+                (
+                    format!("● LIVE [{:02}:{:02}]", m, s),
+                    egui::Color32::from_rgb(0, 220, 100),
+                )
             }
             ConnectionState::DemoMode { since } => {
                 let elapsed = since.elapsed().as_secs();
                 let m = elapsed / 60;
                 let s = elapsed % 60;
-                (format!("● DEMO [{:02}:{:02}]", m, s), egui::Color32::from_rgb(80, 170, 255))
+                (
+                    format!("● DEMO [{:02}:{:02}]", m, s),
+                    egui::Color32::from_rgb(80, 170, 255),
+                )
             }
-            ConnectionState::Error(err) => (format!("● ERROR: {}", err), egui::Color32::from_rgb(255, 120, 40)),
+            ConnectionState::Error(err) => (
+                format!("● ERROR: {}", err),
+                egui::Color32::from_rgb(255, 120, 40),
+            ),
         }
     }
 }
@@ -83,20 +98,20 @@ impl SystemHealthStatus {
             SystemHealthStatus::Nominal => (
                 "● BEZ ANOMÁLIÍ",
                 "Všechny systémy nominální",
-                egui::Color32::from_rgb(0, 220, 100),       // Bright green
-                egui::Color32::from_rgb(12, 38, 20),        // Dark green frame fill
+                egui::Color32::from_rgb(0, 220, 100), // Bright green
+                egui::Color32::from_rgb(12, 38, 20),  // Dark green frame fill
             ),
             SystemHealthStatus::Warning => (
                 "VAROVÁNÍ (MINOR)",
                 "Zvýšené zatížení / teplota",
-                egui::Color32::from_rgb(255, 205, 40),      // Bright amber/yellow
-                egui::Color32::from_rgb(45, 36, 8),         // Dark amber frame fill
+                egui::Color32::from_rgb(255, 205, 40), // Bright amber/yellow
+                egui::Color32::from_rgb(45, 36, 8),    // Dark amber frame fill
             ),
             SystemHealthStatus::Critical => (
                 "KRITICKÉ RIZIKO",
                 "Nadproud / Pokles / Zkrat",
-                egui::Color32::from_rgb(255, 75, 75),       // Bright red
-                egui::Color32::from_rgb(50, 14, 14),        // Dark red frame fill
+                egui::Color32::from_rgb(255, 75, 75), // Bright red
+                egui::Color32::from_rgb(50, 14, 14),  // Dark red frame fill
             ),
         }
     }
@@ -146,17 +161,17 @@ pub struct TelemetryApp {
     pub fan_duty: i32,
     /// Three-letter driver identifier code sent to the onboard matrix display.
     pub driver_code: String,
-    
+
     /// Active telemetry parameter tab rendered in the history chart.
     pub chart_tab: ChartTab,
     /// Time window width in seconds displayed on the horizontal axis of the chart.
     pub chart_window: f64,
-    
+
     /// Total count of valid telemetry packets decoded during the session.
     pub packet_count: u32,
     /// Toggle flag controlling visibility of the bottom diagnostics & raw packet panel.
     pub show_diagnostics: bool,
-    
+
     /// List of auto-detected serial ports currently present on the system.
     pub available_ports: Vec<String>,
     /// Pauses additions to the historical data manager buffer for visual inspection.
@@ -169,7 +184,7 @@ pub struct TelemetryApp {
     pub last_pps_update: Instant,
     /// Optional transient toast notification showing the status of screenshots (message, display_until).
     pub screenshot_toast: Option<(String, Instant)>,
-    
+
     /// Bounded FIFO queue of formatted anomaly alert records for the UI.
     pub recent_anomalies: VecDeque<AnomalyRecord>,
 
@@ -203,7 +218,9 @@ impl Default for TelemetryApp {
         let available_ports = serial::detect_available_ports();
 
         // If configured port is not found or empty, choose the first detected port if any
-        let port_name = if !available_ports.is_empty() && (!available_ports.contains(&default_port) || default_port.is_empty()) {
+        let port_name = if !available_ports.is_empty()
+            && (!available_ports.contains(&default_port) || default_port.is_empty())
+        {
             available_ports[0].clone()
         } else {
             default_port
@@ -261,7 +278,9 @@ impl TelemetryApp {
         self.stop_worker();
         let running = Arc::new(AtomicBool::new(true));
         self.shutdown_signal = Some(running.clone());
-        self.connection_state = ConnectionState::Live { since: Instant::now() };
+        self.connection_state = ConnectionState::Live {
+            since: Instant::now(),
+        };
         let (cmd_tx, cmd_rx) = mpsc::channel();
         self.cmd_tx = Some(cmd_tx);
         self.worker_handle = Some(serial::start_serial_thread(
@@ -278,8 +297,15 @@ impl TelemetryApp {
         self.stop_worker();
         let running = Arc::new(AtomicBool::new(true));
         self.shutdown_signal = Some(running.clone());
-        self.connection_state = ConnectionState::DemoMode { since: Instant::now() };
-        self.worker_handle = Some(demo::start_demo_thread("data/data.csv", self.telemetry_tx.clone(), running, self.config.demo_interval_ms));
+        self.connection_state = ConnectionState::DemoMode {
+            since: Instant::now(),
+        };
+        self.worker_handle = Some(demo::start_demo_thread(
+            "data/data.csv",
+            self.telemetry_tx.clone(),
+            running,
+            self.config.demo_interval_ms,
+        ));
     }
 
     /// Disconnects any active communication threads and resets PPS and health status.
@@ -309,9 +335,14 @@ impl TelemetryApp {
     /// Computes a post-race analytics report from recorded telemetry and opens the in-app modal dialog.
     pub fn open_report_modal(&mut self) {
         let duration_s = match self.connection_state {
-            ConnectionState::Live { since } | ConnectionState::DemoMode { since } => since.elapsed().as_secs_f64(),
+            ConnectionState::Live { since } | ConnectionState::DemoMode { since } => {
+                since.elapsed().as_secs_f64()
+            }
             ConnectionState::Disconnected | ConnectionState::Error(_) => {
-                if let (Some(first), Some(last)) = (self.data_manager.history().first(), self.data_manager.history().last()) {
+                if let (Some(first), Some(last)) = (
+                    self.data_manager.history().first(),
+                    self.data_manager.history().last(),
+                ) {
                     if last.timestamp_ms > first.timestamp_ms {
                         f64::from(last.timestamp_ms - first.timestamp_ms) / 1000.0
                     } else {
@@ -342,7 +373,7 @@ impl TelemetryApp {
             anom.cause,
             "anomalies.log",
         );
-        
+
         let log_str = anom.format_ui();
         if self.recent_anomalies.len() >= self.config.anomaly_queue_capacity {
             self.recent_anomalies.pop_front();
@@ -436,11 +467,11 @@ impl eframe::App for TelemetryApp {
                 }
             }
         }
-        
+
         while let Ok(sample) = self.rx.try_recv() {
             self.packet_count += 1;
             self.pps_counter += 1;
-            
+
             // Evaluate configured anomaly rules via the standalone anomaly engine
             let detected = anomaly::detect_anomalies(&sample, &self.config);
             let mut highest_severity = None;
@@ -465,11 +496,12 @@ impl eframe::App for TelemetryApp {
                 }
 
                 if self.connection_state == ConnectionState::Disconnected {
-                    self.connection_state = ConnectionState::Live { since: Instant::now() };
+                    self.connection_state = ConnectionState::Live {
+                        since: Instant::now(),
+                    };
                 }
 
                 self.latest_sample = Some(sample);
-                
             } else if sample.has_rev3_aux {
                 self.latest_aux = Some(sample.rev3_aux);
             }
@@ -502,7 +534,9 @@ impl eframe::App for TelemetryApp {
         }
 
         ui::render_dashboard(self, ctx);
-        ctx.request_repaint_after(std::time::Duration::from_millis(self.config.ui_refresh_interval_ms));
+        ctx.request_repaint_after(std::time::Duration::from_millis(
+            self.config.ui_refresh_interval_ms,
+        ));
     }
 }
 
@@ -535,8 +569,14 @@ mod tests {
     fn connection_state_is_connected_checks() {
         assert!(!ConnectionState::Disconnected.is_connected());
         assert!(!ConnectionState::Error("failed".into()).is_connected());
-        assert!(ConnectionState::Live { since: Instant::now() }.is_connected());
-        assert!(ConnectionState::DemoMode { since: Instant::now() }.is_connected());
+        assert!(ConnectionState::Live {
+            since: Instant::now()
+        }
+        .is_connected());
+        assert!(ConnectionState::DemoMode {
+            since: Instant::now()
+        }
+        .is_connected());
     }
 
     #[test]
@@ -544,10 +584,16 @@ mod tests {
         let (text, _) = ConnectionState::Disconnected.status_text();
         assert!(text.contains("DISCONNECTED"));
 
-        let (live_text, _) = (ConnectionState::Live { since: Instant::now() }).status_text();
+        let (live_text, _) = (ConnectionState::Live {
+            since: Instant::now(),
+        })
+        .status_text();
         assert!(live_text.contains("LIVE"));
 
-        let (demo_text, _) = (ConnectionState::DemoMode { since: Instant::now() }).status_text();
+        let (demo_text, _) = (ConnectionState::DemoMode {
+            since: Instant::now(),
+        })
+        .status_text();
         assert!(demo_text.contains("DEMO"));
 
         let (err_text, _) = (ConnectionState::Error("Port busy".into())).status_text();
@@ -567,7 +613,9 @@ mod tests {
     #[test]
     fn telemetry_app_disconnect_resets_pps_and_state() {
         let mut app = TelemetryApp::default();
-        app.connection_state = ConnectionState::Live { since: Instant::now() };
+        app.connection_state = ConnectionState::Live {
+            since: Instant::now(),
+        };
         app.pps = 25.0;
         app.pps_counter = 10;
 
